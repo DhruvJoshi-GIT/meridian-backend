@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 560" width="760" height="560" font-family="Inter, Segoe UI, system-ui, sans-serif">
+  <rect width="760" height="560" rx="18" fill="#0b0b10"/>
+  <text x="380" y="40" text-anchor="middle" fill="#f2f2f5" font-size="20" font-weight="700">What the API models, and where the pages sit</text>
+  <g opacity="0.55">
+    <circle cx="300" cy="230" r="170" fill="#36e2ff"/>
+    <circle cx="460" cy="230" r="170" fill="#ff4b5c"/>
+    <circle cx="380" cy="360" r="170" fill="#9cff57"/>
+  </g>
+  <g opacity="0.9" fill="none" stroke-width="2">
+    <circle cx="300" cy="230" r="170" stroke="#9cf0ff"/>
+    <circle cx="460" cy="230" r="170" stroke="#ff9aa3"/>
+    <circle cx="380" cy="360" r="170" stroke="#ccffa6"/>
+  </g>
+  <text x="170" y="140" fill="#fff" font-size="18" font-weight="700">Supply-chain graph</text>
+  <text x="170" y="162" fill="#dffaff" font-size="12">Entity, Link, Material, SupplyChain</text>
+  <text x="170" y="180" fill="#dffaff" font-size="12">Explorer, Global Map</text>
+  <text x="640" y="140" text-anchor="end" fill="#fff" font-size="18" font-weight="700">Risk models</text>
+  <text x="640" y="162" text-anchor="end" fill="#ffe0e3" font-size="12">HHI, disruption propagation, landed cost</text>
+  <text x="640" y="180" text-anchor="end" fill="#ffe0e3" font-size="12">Dependency, Simulator, Tariff</text>
+  <text x="380" y="505" text-anchor="middle" fill="#fff" font-size="18" font-weight="700">Analyst workflow</text>
+  <text x="380" y="526" text-anchor="middle" fill="#eaffd6" font-size="12">Alerts, Activity, Reports, Data sources</text>
+  <text x="380" y="190" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">Chokepoints and</text>
+  <text x="380" y="206" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">concentration</text>
+  <text x="268" y="372" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">Search and</text>
+  <text x="268" y="388" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">entity detail</text>
+  <text x="492" y="372" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">Saved scenarios</text>
+  <text x="492" y="388" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">and briefs</text>
+  <text x="380" y="286" text-anchor="middle" fill="#fff" font-size="15" font-weight="800">Overview page</text>
+  <text x="380" y="304" text-anchor="middle" fill="#fff" font-size="11">GET /api/overview</text>
+</svg>

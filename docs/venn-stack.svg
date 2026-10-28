@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 560" width="760" height="560" font-family="Inter, Segoe UI, system-ui, sans-serif">
+  <rect width="760" height="560" rx="18" fill="#0b0b10"/>
+  <text x="380" y="40" text-anchor="middle" fill="#f2f2f5" font-size="20" font-weight="700">Where the three core libraries overlap</text>
+  <g opacity="0.55">
+    <circle cx="300" cy="230" r="170" fill="#7c5cff"/>
+    <circle cx="460" cy="230" r="170" fill="#36e2ff"/>
+    <circle cx="380" cy="360" r="170" fill="#ff9a3c"/>
+  </g>
+  <g opacity="0.9" fill="none" stroke-width="2">
+    <circle cx="300" cy="230" r="170" stroke="#b7a6ff"/>
+    <circle cx="460" cy="230" r="170" stroke="#9cf0ff"/>
+    <circle cx="380" cy="360" r="170" stroke="#ffc48a"/>
+  </g>
+  <!-- Set labels -->
+  <text x="190" y="150" fill="#fff" font-size="18" font-weight="700">Express 5</text>
+  <text x="190" y="172" fill="#e6e0ff" font-size="12">HTTP layer, routing, middleware</text>
+  <text x="560" y="150" text-anchor="end" fill="#fff" font-size="18" font-weight="700">Prisma</text>
+  <text x="620" y="172" text-anchor="end" fill="#dffaff" font-size="12">Schema, migrations, typed queries</text>
+  <text x="380" y="505" text-anchor="middle" fill="#fff" font-size="18" font-weight="700">Zod</text>
+  <text x="380" y="526" text-anchor="middle" fill="#ffe9d2" font-size="12">Runtime validation of every input</text>
+  <!-- Pairwise overlaps -->
+  <text x="380" y="190" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">Route handlers</text>
+  <text x="380" y="206" text-anchor="middle" fill="#fff" font-size="11">req -> query -> JSON</text>
+  <text x="268" y="372" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">Validated bodies</text>
+  <text x="268" y="388" text-anchor="middle" fill="#fff" font-size="11">400 with issue list</text>
+  <text x="492" y="372" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">Typed inputs</text>
+  <text x="492" y="388" text-anchor="middle" fill="#fff" font-size="11">zod.infer -> Prisma args</text>
+  <!-- Centre -->
+  <text x="380" y="286" text-anchor="middle" fill="#fff" font-size="15" font-weight="800">Meridian API</text>
+  <text x="380" y="304" text-anchor="middle" fill="#fff" font-size="11">TypeScript end to end</text>
+</svg>

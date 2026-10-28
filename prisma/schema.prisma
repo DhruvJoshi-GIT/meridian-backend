@@ -1,0 +1,279 @@
+// Meridian Supply Chain Intelligence - data model
+// Derived from the Figma Make frontend (src/App.tsx). SQLite for zero-setup local dev;
+// change provider to "postgresql" and DATABASE_URL to move to Postgres.
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"] // local + Vercel (Amazon Linux 2023)
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  title        String   @default("Analyst")
+  initials     String
+  createdAt    DateTime @default(now())
+
+  activities      Activity[]
+  simulations     Simulation[]
+  tariffScenarios TariffScenario[]
+  reports         Report[]
+}
+
+// A tracked critical material, e.g. Gallium, Gallium Nitride (GaN)
+model Material {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  symbol      String?
+  category    String
+  criticality String   @default("medium") // low | medium | high
+  description String?
+  createdAt   DateTime @default(now())
+
+  entities     EntityMaterial[]
+  supplyChains SupplyChain[]
+  assessments  DependencyAssessment[]
+  alternatives AlternativeSource[]
+}
+
+// Any node in the supply network: facility, port, corridor, programme
+model Entity {
+  id               String   @id @default(cuid())
+  slug             String   @unique
+  name             String
+  type             String // RAW_MATERIAL | PROCESSING | MANUFACTURER | LOGISTICS | SUPPLIER | END_USE
+  typeLabel        String // human label shown in UI, e.g. "Processing", "End use"
+  description      String?
+  region           String?
+  country          String?
+  lat              Float?
+  lng              Float?
+  mapX             Float? // % position on the illustrative map
+  mapY             Float?
+  risk             String   @default("low") // low | medium | high
+  dependencyScore  Int      @default(0) // 0-100
+  confidence       String   @default("Moderate") // Low | Moderate | High
+  evidenceStatus   String   @default("Inferred") // Documented | Inferred | Estimated
+  evidenceNote     String?
+  isChokepoint     Boolean  @default(false)
+  chokepointStatus String? // normal | elevated
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  materials   EntityMaterial[]
+  outgoing    Link[]             @relation("LinkFrom")
+  incoming    Link[]             @relation("LinkTo")
+  stages      SupplyChainStage[]
+  alerts      Alert[]
+  simulations Simulation[]
+  projects    ProjectEntity[]
+  depItems    DependencyItem[]
+}
+
+model EntityMaterial {
+  entityId   String
+  materialId String
+  role       String? // produces | processes | consumes | transits
+  entity     Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  material   Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@id([entityId, materialId])
+}
+
+// Directed flow between two entities
+model Link {
+  id           String  @id @default(cuid())
+  fromId       String
+  toId         String
+  kind         String  @default("flow") // flow | route | inferred
+  corridor     String?
+  risk         String  @default("low")
+  volumeShare  Float   @default(0) // 0-1 share of modeled supply carried on this link
+  materialSlug String?
+  from         Entity  @relation("LinkFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to           Entity  @relation("LinkTo", fields: [toId], references: [id], onDelete: Cascade)
+
+  @@index([fromId])
+  @@index([toId])
+}
+
+// Ordered origin-to-end-use chain for a material (Supply Chain Explorer)
+model SupplyChain {
+  id         String             @id @default(cuid())
+  materialId String
+  name       String
+  note       String?
+  material   Material           @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  stages     SupplyChainStage[]
+}
+
+model SupplyChainStage {
+  id       String      @id @default(cuid())
+  chainId  String
+  order    Int
+  stage    String // RAW MATERIAL | PROCESSING | MANUFACTURING | LOGISTICS | END USE
+  entityId String
+  chain    SupplyChain @relation(fields: [chainId], references: [id], onDelete: Cascade)
+  entity   Entity      @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@unique([chainId, order])
+}
+
+// Intelligence updates feed
+model Alert {
+  id          String   @id @default(cuid())
+  level       String // Critical | Elevated | Advisory
+  title       String
+  body        String
+  kind        String // Model warning | Estimated | Simulated | Documented
+  status      String   @default("open") // open | acknowledged | resolved
+  relatedPage String? // e.g. "Dependency Analysis", "Tariff Intelligence"
+  entityId    String?
+  entity      Entity?  @relation(fields: [entityId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Per-user recent activity (searches, simulations, reports)
+model Activity {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String // search | simulation | report | view
+  title     String
+  refType   String?
+  refId     String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+// Programmes / projects that may be exposed to disruptions
+model Project {
+  id        String          @id @default(cuid())
+  name      String
+  programme String
+  sector    String?
+  exposure  String          @default("medium") // low | medium | high
+  entities  ProjectEntity[]
+}
+
+model ProjectEntity {
+  projectId String
+  entityId  String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  entity    Entity  @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, entityId])
+}
+
+// Disruption Simulator runs
+model Simulation {
+  id                  String   @id @default(cuid())
+  userId              String
+  name                String?
+  scenarioType        String // Supplier shutdown | Port closure | Export restriction | Natural hazard
+  entityId            String
+  durationDays        Int
+  inventoryBufferDays Int
+  supplyReductionPct  Int
+  status              String   @default("complete")
+  result              String // JSON (SimulationResult)
+  createdAt           DateTime @default(now())
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entity              Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+}
+
+// Tariff Intelligence saved scenarios
+model TariffScenario {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String?
+  origin      String
+  destination String
+  product     String
+  hsCode      String?
+  hsStatus    String   @default("Review required")
+  dutyPct     Float
+  baseCost    Float
+  freight     Float
+  insurance   Float
+  result      String // JSON (TariffResult)
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Dependency Analysis assessment per material
+model DependencyAssessment {
+  id            String           @id @default(cuid())
+  materialId    String
+  title         String
+  hhi           Int
+  concentration String // Low | Moderate | High
+  summary       String?
+  updatedAt     DateTime         @default(now())
+  material      Material         @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  items         DependencyItem[]
+}
+
+model DependencyItem {
+  id           String               @id @default(cuid())
+  assessmentId String
+  entityId     String
+  rank         Int
+  score        Int // 0-100 dependency score
+  rating       String // High | Moderate | Low
+  note         String?
+  assessment   DependencyAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  entity       Entity               @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@unique([assessmentId, rank])
+}
+
+// Alternative Sources options
+model AlternativeSource {
+  id            String   @id @default(cuid())
+  materialId    String
+  name          String
+  type          String // supplier | route | recycling | substitution
+  region        String?
+  readiness     String   @default("Emerging") // Qualified | Emerging | Research
+  leadTimeDays  Int?
+  costDeltaPct  Float? // vs current modeled cost
+  riskReduction Int? // 0-100
+  notes         String?
+  material      Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+}
+
+// Saved intelligence briefs
+model Report {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  type      String // Decision brief | Scenario | Review | Assessment
+  status    String   @default("ready") // generating | ready | archived
+  rating    String? // High | Moderate | Low
+  score     Int?
+  summary   String?
+  content   String // JSON sections
+  format    String   @default("PDF preview")
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model DataSource {
+  id            String   @id @default(cuid())
+  name          String
+  kind          String // Trade flows | Customs | Shipping AIS | Policy | Internal model
+  status        String   @default("healthy") // healthy | degraded | stale
+  lastUpdatedAt DateTime @default(now())
+  note          String?
+}
