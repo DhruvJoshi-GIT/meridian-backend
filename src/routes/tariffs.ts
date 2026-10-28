@@ -5,6 +5,7 @@ import { parse } from "../lib/validate";
 import { requireAuth } from "../middleware/auth";
 import { calculateTariff } from "../services/tariff";
 import { laneSummary, simulateTariff } from "../services/tariffSim";
+import { simulateExporter, exporterCurves, runAbsorber } from "../services/exporterSim";
 import { notFound } from "../lib/errors";
 
 export const tariffsRouter = Router();
@@ -49,6 +50,40 @@ tariffsRouter.get("/lanes", async (req, res) => {
 tariffsRouter.post("/simulate", async (req, res) => {
   const body = parse(z.object({ material: z.string().default("gallium-nitride"), dutyPct: z.coerce.number().min(0).max(500), destination: z.string().optional(), elasticity: z.coerce.number().max(0).optional() }), req.body ?? {});
   res.json(await simulateTariff(body));
+});
+
+const exporterSchema = z.object({
+  fob: z.coerce.number().min(0).default(100),
+  freight: z.coerce.number().min(0).default(8),
+  unitCost: z.coerce.number().min(0).default(80),
+  volume: z.coerce.number().min(0).default(100000),
+  oldDutyPct: z.coerce.number().min(0).max(500).default(18),
+  newDutyPct: z.coerce.number().min(0).max(500).default(33),
+  elasticity: z.coerce.number().max(0).default(-1.5),
+  absorption: z.coerce.number().min(0).max(1).default(0),
+  rivalLanded: z.coerce.number().min(0).optional(),
+  extraCostPerUnit: z.coerce.number().min(0).optional(),
+});
+
+/** Defaults for the exporter simulator and absorber forms (the worked example). */
+tariffsRouter.get("/exporter/defaults", (_req, res) => {
+  res.json({ fob: 100, freight: 8, unitCost: 80, volume: 100000, oldDutyPct: 18, newDutyPct: 33, elasticity: -1.5, absorption: 0, rivalLanded: 127.6, absorbShare: 0.5, origin: { dutyPct: 28, extraCostPerUnit: 1 }, shift: { units: 20000, marginPerUnit: 12 } });
+});
+
+/** Exporter-side impact of a duty change: landed cost, price, volume, profit, break-even. */
+tariffsRouter.post("/exporter", (req, res) => {
+  const input = parse(exporterSchema, req.body ?? {});
+  res.json({ result: simulateExporter(input), curves: exporterCurves(input) });
+});
+
+/** Tariff Absorber: compare mitigation actions with doing nothing. */
+tariffsRouter.post("/absorber", (req, res) => {
+  const input = parse(exporterSchema.extend({
+    absorbShare: z.coerce.number().min(0).max(1).default(0.5),
+    origin: z.object({ dutyPct: z.coerce.number().min(0).max(500).default(28), extraCostPerUnit: z.coerce.number().min(0).default(1) }).default({ dutyPct: 28, extraCostPerUnit: 1 }),
+    shift: z.object({ units: z.coerce.number().min(0).default(20000), marginPerUnit: z.coerce.number().default(12) }).default({ units: 20000, marginPerUnit: 12 }),
+  }), req.body ?? {});
+  res.json(runAbsorber(input));
 });
 
 /** Stateless calculation (called as the duty slider moves). */

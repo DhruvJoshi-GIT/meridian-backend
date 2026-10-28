@@ -6,7 +6,7 @@ import {
   MapPin, Factory, Route, ShieldCheck, ArrowUpRight, Play, Pause, RotateCcw, SkipForward, Download, Loader2
 } from "lucide-react";
 import L from "leaflet";
-import { api, tariffSim, journey as fetchJourney, type Alert as AlertT, type Entity, type MapNode, type SimulationResult, type TariffResult, type TariffSimulation, type Journey } from "./lib/api";
+import { api, tariffSim, exporter as exporterApi, journey as fetchJourney, type Alert as AlertT, type Entity, type MapNode, type SimulationResult, type TariffResult, type TariffSimulation, type Journey, type ExporterInput, type ExporterResult, type ExporterCurves, type AbsorberInput, type AbsorberResult } from "./lib/api";
 
 type Page = "Overview" | "Supply Chain Explorer" | "Global Map" | "Chain Simulation" | "Dependency Analysis" | "Disruption Simulator" | "Tariff Intelligence" | "Alternative Sources" | "Reports";
 
@@ -301,9 +301,17 @@ function Tariff() {
   const lo = costs.length ? Math.min(...costs) : 0, hi = costs.length ? Math.max(...costs) : 1;
   const points = curve.map(c => `${(c.dutyPct / maxDuty) * 500},${150 - ((c.landedCost - lo) / (hi - lo || 1)) * 140}`).join(" ");
   const set = (k: keyof typeof trade) => (v: string) => setTrade(t => ({ ...t, [k]: v }));
-  return <><PageTitle title="Tariff Intelligence" sub="Measure how trade-policy changes affect supply chains and landed costs."/>
+  const [tab, setTab] = useState<"lanes" | "exporter" | "absorber">("lanes");
+  return <><PageTitle title="Tariff Intelligence" sub="Measure how trade-policy changes affect supply chains, landed costs, exporter profit and the best way to respond."/>
     <ApiError message={opts.error ?? error}/>
-    <div className="tariff-grid">
+    <div className="tabs">
+      <button className={tab === "lanes" ? "active" : ""} onClick={() => setTab("lanes")}>Landed cost &amp; trade lanes</button>
+      <button className={tab === "exporter" ? "active" : ""} onClick={() => setTab("exporter")}>Exporter simulator</button>
+      <button className={tab === "absorber" ? "active" : ""} onClick={() => setTab("absorber")}>Tariff Absorber</button>
+    </div>
+    {tab === "exporter" && <ExporterSimulator/>}
+    {tab === "absorber" && <Absorber/>}
+    {tab === "lanes" && <><div className="tariff-grid">
       <section className="panel"><h2>Trade scenario</h2>
         <div className="two-col"><FormField label="ORIGIN" value={trade.origin} options={(o?.origins ?? [trade.origin]).map(x => [x, x] as [string, string])} onChange={set("origin")}/><FormField label="DESTINATION" value={trade.destination} options={(o?.destinations ?? [trade.destination]).map(x => [x, x] as [string, string])} onChange={set("destination")}/></div>
         <FormField label="PRODUCT" value={trade.product} options={(o?.products ?? [{ name: trade.product }]).map(p => [p.name, p.name] as [string, string])} onChange={set("product")}/>
@@ -318,7 +326,133 @@ function Tariff() {
         <div className="line-chart"><svg viewBox="0 0 500 150">{points && <polyline points={points}/>}<line x1={duty / maxDuty * 500} x2={duty / maxDuty * 500} y1="0" y2="150"/></svg></div>
       </section>
     </div>
-    <TariffSimulator/></>;
+    <TariffSimulator/></>}</>;
+}
+
+/* ---------- Exporter simulator: what a duty change does to an exporter's price, volume and profit ---------- */
+function NumField({ label, value, onChange, unit, step = 1, min }: { label: string; value: number; onChange: (v: number) => void; unit?: string; step?: number; min?: number }) {
+  return <label className="field"><span>{label}</span><span className="num-box"><input type="number" value={value} step={step} min={min} onChange={e => onChange(Number(e.target.value))}/>{unit && <span>{unit}</span>}</span></label>;
+}
+const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
+const moneyM = (n: number) => Math.abs(n) >= 1e6 ? `$${(n / 1e6).toFixed(2)}M` : Math.abs(n) >= 1e3 ? `$${Math.round(n / 1e3)}k` : `$${Math.round(n)}`;
+const pct = (n: number) => `${n > 0 ? "+" : ""}${n}%`;
+
+function useExporterDefaults() {
+  const d = useApi(() => exporterApi.defaults());
+  return d.data;
+}
+
+function ExporterSimulator() {
+  const defaults = useExporterDefaults();
+  const [f, setF] = useState<ExporterInput>({ fob: 100, freight: 8, unitCost: 80, volume: 100000, oldDutyPct: 18, newDutyPct: 33, elasticity: -1.5, absorption: 0, rivalLanded: 127.6 });
+  const [out, setOut] = useState<{ result: ExporterResult; curves: ExporterCurves } | null>(null);
+  const [error, setError] = useState<string>();
+  useEffect(() => { if (defaults) setF(({ fob: defaults.fob, freight: defaults.freight, unitCost: defaults.unitCost, volume: defaults.volume, oldDutyPct: defaults.oldDutyPct, newDutyPct: defaults.newDutyPct, elasticity: defaults.elasticity, absorption: defaults.absorption, rivalLanded: defaults.rivalLanded })); }, [defaults]);
+  useEffect(() => { const t = setTimeout(() => exporterApi.run(f).then(setOut).catch((e: Error) => setError(e.message)), 180); return () => clearTimeout(t); }, [f]);
+  const set = (k: keyof ExporterInput) => (v: number) => setF(x => ({ ...x, [k]: v }));
+  const r = out?.result, c = out?.curves;
+  const maxD = c ? c.byDuty.length - 1 : 60;
+  const pMin = c ? Math.min(...c.byDuty.map(p => p.profit), 0) : 0, pMax = c ? Math.max(...c.byDuty.map(p => p.profit), 1) : 1;
+  const X = (d: number) => (d / maxD) * 500, Y = (p: number) => 140 - ((p - pMin) / (pMax - pMin || 1)) * 130;
+  const dutyPts = c ? c.byDuty.map(p => `${X(p.dutyPct)},${Y(p.profit)}`) : [];
+  const aMin = c ? Math.min(...c.byAbsorption.map(p => p.profit)) : 0, aMax = c ? Math.max(...c.byAbsorption.map(p => p.profit)) : 1;
+  const absPts = c ? c.byAbsorption.map(p => `${(p.absorptionPct / 100) * 500},${140 - ((p.profit - aMin) / (aMax - aMin || 1)) * 130}`) : [];
+  return <>
+    <section className="panel">
+      <div className="sim-head"><div><h2>Exporter simulator</h2><p className="muted">What a duty change does to the buyer's price, the volume you keep, and your profit. Every step is shown with its formula.</p></div><Badge tone={r ? (r.profitDelta < 0 ? "red" : "teal") : "neutral"}>{r ? `${pct(r.profitDeltaPct)} profit` : "…"}</Badge></div>
+      <ApiError message={error}/>
+      <div className="num-grid">
+        <NumField label="FOB PRICE / UNIT" value={f.fob} onChange={set("fob")} unit="$" step={1} min={0}/>
+        <NumField label="FREIGHT / UNIT" value={f.freight} onChange={set("freight")} unit="$" step={0.5} min={0}/>
+        <NumField label="UNIT COST" value={f.unitCost} onChange={set("unitCost")} unit="$" step={1} min={0}/>
+        <NumField label="VOLUME (UNITS)" value={f.volume} onChange={set("volume")} step={1000} min={0}/>
+        <NumField label="OLD DUTY" value={f.oldDutyPct} onChange={set("oldDutyPct")} unit="%" step={0.5} min={0}/>
+        <NumField label="NEW DUTY" value={f.newDutyPct} onChange={set("newDutyPct")} unit="%" step={0.5} min={0}/>
+        <NumField label="DEMAND ELASTICITY" value={f.elasticity} onChange={set("elasticity")} step={0.1}/>
+        <NumField label="RIVAL LANDED PRICE" value={f.rivalLanded ?? 0} onChange={set("rivalLanded")} unit="$" step={0.1} min={0}/>
+      </div>
+      <label className="range-label" style={{ display: "block", marginTop: 16 }}>DUTY INCREASE ABSORBED BY EXPORTER <b>{Math.round(f.absorption * 100)}%</b></label>
+      <input type="range" min="0" max="100" value={Math.round(f.absorption * 100)} onChange={e => set("absorption")(+e.target.value / 100)}/>
+      {r && <>
+        <div className="exp-tiles">
+          <article><small>LANDED COST</small><strong>${r.oldLanded} → ${r.newLanded}</strong><p>buyer pays +${r.buyerIncrease}/unit</p></article>
+          <article><small>PRICE CHANGE</small><strong className={r.priceChangePct > 0 ? "up" : r.priceChangePct < 0 ? "down" : ""}>{pct(r.priceChangePct)}</strong><p>of old landed cost</p></article>
+          <article><small>VOLUME</small><strong className={r.volumeChangePct < 0 ? "up" : "down"}>{pct(r.volumeChangePct)}</strong><p>{r.oldVolume.toLocaleString()} → {r.newVolume.toLocaleString()} units</p></article>
+          <article><small>PROFIT</small><strong className={r.profitDelta < 0 ? "up" : "down"}>{moneyM(r.oldProfit)} → {moneyM(r.newProfit)}</strong><p>{r.profitDelta >= 0 ? "+" : "−"}{moneyM(Math.abs(r.profitDelta))} · margin ${r.marginPerUnitOld} → ${r.marginPerUnitNew}</p></article>
+          <article><small>BREAK-EVEN DUTY</small><strong className={r.pastBreakEven ? "up" : ""}>{r.breakEvenDutyPct != null ? `${r.breakEvenDutyPct}%` : "–"}</strong><p>{r.breakEvenDutyPct == null ? "enter a rival landed price" : r.pastBreakEven ? `${f.newDutyPct}% is past it: buyers can switch` : `${f.newDutyPct}% is still competitive`}</p></article>
+        </div>
+        <h4 className="sub-h">How it is calculated</h4>
+        <div className="formula-table">
+          <div className="head"><span>STEP</span><span>FORMULA</span><span>WITH YOUR NUMBERS</span></div>
+          {r.steps.map(s => <div key={s.label}><b>{s.label}</b><code>{s.formula}</code><span className="v">{s.value}</span></div>)}
+        </div>
+        <div className="chart2">
+          <section className="panel"><h4>Profit vs. new duty rate</h4>
+            <svg viewBox="0 0 500 150" preserveAspectRatio="none">{dutyPts.length > 1 && <><path className="area" d={`M0,140 L${dutyPts.join(" L")} L500,140 Z`}/><path d={`M${dutyPts.join(" L")}`}/></>}<line className="old" x1={X(f.oldDutyPct)} x2={X(f.oldDutyPct)} y1="0" y2="140"/><line className="new" x1={X(f.newDutyPct)} x2={X(f.newDutyPct)} y1="0" y2="140"/>{r.breakEvenDutyPct != null && r.breakEvenDutyPct >= 0 && <line className="be" x1={X(r.breakEvenDutyPct)} x2={X(r.breakEvenDutyPct)} y1="0" y2="140"/>}</svg>
+            <div className="lg"><span><i style={{ background: "#94a3b8" }}/>old duty {f.oldDutyPct}%</span><span><i style={{ background: "var(--amber)" }}/>new duty {f.newDutyPct}%</span>{r.breakEvenDutyPct != null && <span><i style={{ background: "var(--red)" }}/>break-even {r.breakEvenDutyPct}%</span>}<span>0 → {maxD}% duty · profit {moneyM(pMin)} to {moneyM(pMax)}</span></div>
+          </section>
+          <section className="panel"><h4>Profit vs. share of duty absorbed</h4>
+            <svg viewBox="0 0 500 150" preserveAspectRatio="none">{absPts.length > 1 && <><path className="area" d={`M0,140 L${absPts.join(" L")} L500,140 Z`}/><path d={`M${absPts.join(" L")}`}/></>}<line className="new" x1={f.absorption * 500} x2={f.absorption * 500} y1="0" y2="140"/></svg>
+            <div className="lg"><span>0% → 100% absorbed · {aMax > aMin ? `best at ${c!.byAbsorption.reduce((b, p) => p.profit > b.profit ? p : b).absorptionPct}% absorbed` : ""}</span></div>
+          </section>
+        </div>
+      </>}
+    </section>
+  </>;
+}
+
+/* ---------- Tariff Absorber: compare ways to respond with doing nothing ---------- */
+function Absorber() {
+  const defaults = useExporterDefaults();
+  const [f, setF] = useState<AbsorberInput>({ fob: 100, freight: 8, unitCost: 80, volume: 100000, oldDutyPct: 18, newDutyPct: 33, elasticity: -1.5, absorption: 0, rivalLanded: 127.6, absorbShare: 0.5, origin: { dutyPct: 28, extraCostPerUnit: 1 }, shift: { units: 20000, marginPerUnit: 12 } });
+  const [out, setOut] = useState<AbsorberResult | null>(null);
+  const [error, setError] = useState<string>();
+  useEffect(() => { if (defaults) setF(defaults); }, [defaults]);
+  useEffect(() => { const t = setTimeout(() => exporterApi.absorber(f).then(setOut).catch((e: Error) => setError(e.message)), 180); return () => clearTimeout(t); }, [f]);
+  const set = (k: keyof AbsorberInput) => (v: number) => setF(x => ({ ...x, [k]: v }));
+  const setO = (k: "dutyPct" | "extraCostPerUnit") => (v: number) => setF(x => ({ ...x, origin: { ...x.origin, [k]: v } }));
+  const setS = (k: "units" | "marginPerUnit") => (v: number) => setF(x => ({ ...x, shift: { ...x.shift, [k]: v } }));
+  const best = out?.actions[0], worst = out?.actions[out.actions.length - 1];
+  const span = out ? Math.max(1, ...out.actions.map(a => Math.abs(a.recovered))) : 1;
+  return <>
+    <section className="panel">
+      <div className="sim-head"><div><h2>Tariff Absorber</h2><p className="muted">Each response is run through the same simulator and compared with doing nothing. The ranking explains itself.</p></div><Badge tone={best ? "teal" : "neutral"}>{best ? `Best: ${best.label}` : "…"}</Badge></div>
+      <ApiError message={error}/>
+      <h4 className="sub-h" style={{ marginTop: 4 }}>The shock</h4>
+      <div className="num-grid">
+        <NumField label="FOB PRICE / UNIT" value={f.fob} onChange={set("fob")} unit="$" min={0}/>
+        <NumField label="FREIGHT / UNIT" value={f.freight} onChange={set("freight")} unit="$" step={0.5} min={0}/>
+        <NumField label="UNIT COST" value={f.unitCost} onChange={set("unitCost")} unit="$" min={0}/>
+        <NumField label="VOLUME (UNITS)" value={f.volume} onChange={set("volume")} step={1000} min={0}/>
+        <NumField label="OLD DUTY" value={f.oldDutyPct} onChange={set("oldDutyPct")} unit="%" step={0.5} min={0}/>
+        <NumField label="NEW DUTY" value={f.newDutyPct} onChange={set("newDutyPct")} unit="%" step={0.5} min={0}/>
+        <NumField label="DEMAND ELASTICITY" value={f.elasticity} onChange={set("elasticity")} step={0.1}/>
+        <NumField label="RIVAL LANDED PRICE" value={f.rivalLanded ?? 0} onChange={set("rivalLanded")} unit="$" step={0.1} min={0}/>
+      </div>
+      <h4 className="sub-h">The responses</h4>
+      <div className="abs-actions">
+        <section className="panel"><h4>Absorb part of the duty</h4><p>Exporter cuts price to keep buyers</p><label className="range-label">SHARE ABSORBED <b>{Math.round(f.absorbShare * 100)}%</b></label><input type="range" min="0" max="100" value={Math.round(f.absorbShare * 100)} onChange={e => set("absorbShare")(+e.target.value / 100)}/></section>
+        <section className="panel"><h4>Requalify origin / relief scheme</h4><p>Lowers the duty rate at an added cost per unit</p><div className="num-grid"><NumField label="DUTY AFTER REQUALIFYING" value={f.origin.dutyPct} onChange={setO("dutyPct")} unit="%" step={0.5} min={0}/><NumField label="EXTRA COST / UNIT" value={f.origin.extraCostPerUnit} onChange={setO("extraCostPerUnit")} unit="$" step={0.25} min={0}/></div></section>
+        <section className="panel"><h4>Shift volume to a lower-tariff market</h4><p>Moves lost units to an FTA or lower-duty market</p><div className="num-grid"><NumField label="UNITS TO SHIFT" value={f.shift.units} onChange={setS("units")} step={1000} min={0}/><NumField label="SWITCHING MARGIN / UNIT" value={f.shift.marginPerUnit} onChange={setS("marginPerUnit")} unit="$" step={0.5}/></div></section>
+      </div>
+      {out && <>
+        <h4 className="sub-h">Ranked by profit</h4>
+        <div className="abs-table">
+          <div className="head"><span>#</span><span>ACTION</span><span>WHAT IT MODELS</span><span>PROFIT</span><span>RECOVERED</span><span>VS DOING NOTHING</span></div>
+          {out.actions.map((a, i) => <div key={a.key} className={a.key === best?.key ? "best" : a.key === worst?.key && a.recovered < 0 ? "worst" : ""} title={a.detail}>
+            <span className="rank">{i + 1}</span>
+            <span><b>{a.label}</b><small>{a.detail}</small></span>
+            <span>{a.models}</span>
+            <span><b>{moneyM(a.profit)}</b><small>{a.volumeSold.toLocaleString()} units sold{a.shiftedUnits ? ` (${a.shiftedUnits.toLocaleString()} shifted)` : ""}</small></span>
+            <span className={a.recovered > 0 ? "pos" : a.recovered < 0 ? "neg" : ""}>{a.recovered === 0 ? "0" : `${a.recovered > 0 ? "+" : "−"}${moneyM(Math.abs(a.recovered))}`}<small>{a.recovered === 0 ? "baseline" : pct(a.recoveredPct)}</small></span>
+            <span><div className="abs-bar"><i className={a.recovered < 0 ? "neg" : ""} style={{ width: `${(Math.abs(a.recovered) / span) * 100}%` }}/></div></span>
+          </div>)}
+        </div>
+        <ul className="insights">{out.insights.map((t, i) => <li key={i}><Sparkles size={14}/><span>{t}</span></li>)}</ul>
+        <p className="disclaimer"><AlertTriangle size={14}/>{out.disclaimer}</p>
+      </>}
+    </section>
+  </>;
 }
 
 /* ---------- Tariff simulator: any material, any duty, every trade lane ---------- */

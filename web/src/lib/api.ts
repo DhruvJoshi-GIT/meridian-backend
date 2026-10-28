@@ -94,3 +94,22 @@ export const tariffSim = {
   simulate: (input: { material: string; dutyPct: number; destination?: string; elasticity?: number }) => request<TariffSimulation>("/tariffs/simulate", { method: "POST", json: input }),
 };
 export const journey = (material = "gallium-nitride") => request<Journey>("/journey?material=" + encodeURIComponent(material));
+
+// ---- Exporter simulator + Tariff Absorber ----
+export interface ExporterInput { fob: number; freight: number; unitCost: number; volume: number; oldDutyPct: number; newDutyPct: number; elasticity: number; absorption: number; rivalLanded?: number; extraCostPerUnit?: number }
+export interface ExporterResult {
+  input: ExporterInput; oldLanded: number; newLanded: number; extraDutyPerUnit: number; buyerIncrease: number; priceChangePct: number; volumeChangePct: number;
+  oldVolume: number; newVolume: number; lostUnits: number; fobReceived: number; marginPerUnitOld: number; marginPerUnitNew: number;
+  oldProfit: number; newProfit: number; profitDelta: number; profitDeltaPct: number; breakEvenDutyPct: number | null; pastBreakEven: boolean | null;
+  steps: { label: string; formula: string; value: string }[];
+}
+export interface ExporterCurves { byDuty: { dutyPct: number; profit: number }[]; byAbsorption: { absorptionPct: number; profit: number }[] }
+export interface AbsorberAction { key: "nothing" | "absorb" | "origin" | "shift" | "combo"; label: string; models: string; profit: number; recovered: number; recoveredPct: number; volumeSold: number; lostUnits: number; shiftedUnits: number; marginPerUnit: number; detail: string }
+export interface AbsorberInput extends ExporterInput { absorbShare: number; origin: { dutyPct: number; extraCostPerUnit: number }; shift: { units: number; marginPerUnit: number } }
+export interface AbsorberResult { input: AbsorberInput; baseline: ExporterResult; actions: AbsorberAction[]; insights: string[]; disclaimer: string }
+
+export const exporter = {
+  defaults: () => request<AbsorberInput>("/tariffs/exporter/defaults"),
+  run: (input: ExporterInput) => request<{ result: ExporterResult; curves: ExporterCurves }>("/tariffs/exporter", { method: "POST", json: input }),
+  absorber: (input: AbsorberInput) => request<AbsorberResult>("/tariffs/absorber", { method: "POST", json: input }),
+};

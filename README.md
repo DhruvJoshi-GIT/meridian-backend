@@ -287,6 +287,9 @@ Model: `shortfall = reduction × entity supply share × scenario severity`; onse
 |---|---|---|
 | GET | `/api/tariffs/options` | Origins, destinations, products with HS codes, defaults |
 | GET | `/api/tariffs/lanes?material=` | **Tariff simulator.** Every origin → destination trade lane for a material with its indicative current duty, the volume-weighted reference duty, and the list of simulatable materials |
+| GET | `/api/tariffs/exporter/defaults` | The worked example used by the exporter simulator and absorber forms |
+| POST | `/api/tariffs/exporter` | **Exporter simulator.** `{fob, freight, unitCost, volume, oldDutyPct, newDutyPct, elasticity, absorption, rivalLanded?}` → landed cost, extra duty, buyer price rise, price and volume change, FOB received, profit before/after, break-even duty, every step with its formula, plus profit curves vs duty and vs absorption |
+| POST | `/api/tariffs/absorber` | **Tariff Absorber.** Same inputs plus `absorbShare`, `origin {dutyPct, extraCostPerUnit}`, `shift {units, marginPerUnit}` → five actions (do nothing, absorb, requalify origin, shift volume, combination) ranked by profit with recovered amount and plain-language insights |
 | POST | `/api/tariffs/simulate` | `{material, dutyPct, destination?, elasticity?}` → landed price today vs. simulated on every lane, aggregated by importing country, weighted summary, estimated volume shift, and a 0..N% price-index curve |
 | POST | `/api/tariffs/calculate` | `{dutyPct, baseCost?, freight?, insurance?, ...}` → current vs scenario landed cost, delta, 0 to 30 % curve. Stateless. |
 | POST | `/api/tariffs/scenarios` | Save a scenario |
