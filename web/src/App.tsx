@@ -1,17 +1,19 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity, AlertTriangle, Bell, Boxes, ChevronDown, ChevronRight, CircleHelp,
   FileText, Gauge, Globe2, Layers3, Menu, Network, PanelLeftClose, Search,
   Settings, Ship, SlidersHorizontal, Sparkles, TrendingUp, X, ZoomIn, ZoomOut,
-  MapPin, Factory, Route, ShieldCheck, ArrowUpRight, Play, Download, Loader2
+  MapPin, Factory, Route, ShieldCheck, ArrowUpRight, Play, Pause, RotateCcw, SkipForward, Download, Loader2
 } from "lucide-react";
-import { api, type Alert as AlertT, type Entity, type MapNode, type SimulationResult, type TariffResult } from "./lib/api";
+import L from "leaflet";
+import { api, tariffSim, journey as fetchJourney, type Alert as AlertT, type Entity, type MapNode, type SimulationResult, type TariffResult, type TariffSimulation, type Journey } from "./lib/api";
 
-type Page = "Overview" | "Supply Chain Explorer" | "Global Map" | "Dependency Analysis" | "Disruption Simulator" | "Tariff Intelligence" | "Alternative Sources" | "Reports";
+type Page = "Overview" | "Supply Chain Explorer" | "Global Map" | "Chain Simulation" | "Dependency Analysis" | "Disruption Simulator" | "Tariff Intelligence" | "Alternative Sources" | "Reports";
 
 const nav: { label: Page; icon: typeof Globe2 }[] = [
   { label: "Overview", icon: Gauge }, { label: "Supply Chain Explorer", icon: Network },
-  { label: "Global Map", icon: Globe2 }, { label: "Dependency Analysis", icon: Activity },
+  { label: "Global Map", icon: Globe2 }, { label: "Chain Simulation", icon: Route },
+  { label: "Dependency Analysis", icon: Activity },
   { label: "Disruption Simulator", icon: SlidersHorizontal }, { label: "Tariff Intelligence", icon: TrendingUp },
   { label: "Alternative Sources", icon: Boxes }, { label: "Reports", icon: FileText },
 ];
@@ -211,6 +213,7 @@ function Workspace({ page, setPage, selected, setSelected }: { page: Page; setPa
   if (page === "Supply Chain Explorer") return <Explorer setPage={setPage} selected={selected} setSelected={setSelected}/>;
   if (page === "Disruption Simulator") return <Simulator selected={selected}/>;
   if (page === "Tariff Intelligence") return <Tariff/>;
+  if (page === "Chain Simulation") return <ChainSimulation setPage={setPage} setSelected={setSelected}/>;
   return <GenericPage page={page} setPage={setPage} selected={selected} setSelected={setSelected}/>;
 }
 
@@ -314,7 +317,207 @@ function Tariff() {
         <div className="delta">+${(result?.delta ?? 0).toLocaleString()} <span>({result?.deltaPct ?? 0}% increase)</span></div>
         <div className="line-chart"><svg viewBox="0 0 500 150">{points && <polyline points={points}/>}<line x1={duty / maxDuty * 500} x2={duty / maxDuty * 500} y1="0" y2="150"/></svg></div>
       </section>
-    </div></>;
+    </div>
+    <TariffSimulator/></>;
+}
+
+/* ---------- Tariff simulator: any material, any duty, every trade lane ---------- */
+function TariffSimulator() {
+  const [material, setMaterial] = useState(MATERIAL);
+  const [destination, setDestination] = useState("");
+  const [duty, setDuty] = useState(25);
+  const lanes = useApi(() => tariffSim.lanes(material), [material]);
+  const [sim, setSim] = useState<TariffSimulation | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const run = useCallback(() => {
+    setBusy(true); setError(undefined);
+    tariffSim.simulate({ material, dutyPct: duty, destination: destination || undefined }).then(setSim).catch((e: Error) => setError(e.message)).finally(() => setBusy(false));
+  }, [material, duty, destination]);
+  useEffect(() => { const t = setTimeout(run, 200); return () => clearTimeout(t); }, [run]);
+  useEffect(() => { setDestination(""); }, [material]);
+
+  const ref = destination ? lanes.data?.destinations.find(d => d.code === destination)?.currentDutyPct : lanes.data?.referenceDutyPct;
+  const refLane = lanes.data?.lanes.find(l => !destination || l.destinationCode === destination);
+  const maxSlider = Math.max(60, Math.ceil(duty / 10) * 10);
+  const curve = sim?.curve ?? [];
+  const cMax = Math.max(1, ...curve.map(c => c.indexPct));
+  const pts = curve.map(c => `${(c.dutyPct / (sim?.maxDutyPct || 1)) * 500},${110 - (c.indexPct / cMax) * 100}`);
+  const sign = (n: number) => `${n > 0 ? "+" : ""}${n}`;
+
+  return <section className="panel sim-panel">
+    <div className="sim-head"><div><h2>Tariff simulator</h2><p className="muted">Set a tariff on any tracked material and see how landed prices move on every trade lane, country by country.</p></div><Badge tone={sim ? (sim.summary.direction === "up" ? "red" : sim.summary.direction === "down" ? "teal" : "neutral") : "neutral"}>{busy ? "Simulating…" : sim ? `${sim.summary.lanes} lanes modeled` : "Awaiting inputs"}</Badge></div>
+    <ApiError message={lanes.error ?? error}/>
+    <div className="sim-controls">
+      <FormField label="MATERIAL / ELEMENT" value={material} options={(lanes.data?.materials ?? [{ slug: material, name: material }]).map(m => [m.slug, m.name] as [string, string])} onChange={setMaterial}/>
+      <FormField label="IMPORTING COUNTRY" value={destination} options={[["", "All destinations"], ...(lanes.data?.destinations ?? []).map(d => [d.code, d.name] as [string, string])]} onChange={setDestination}/>
+      <label className="field"><span>SIMULATED TARIFF</span><span className="duty-box"><input type="number" min={0} max={500} step={0.5} value={duty} onChange={e => setDuty(Math.max(0, Math.min(500, Number(e.target.value) || 0)))}/><span>%</span></span></label>
+      <button className="btn primary" onClick={run} disabled={busy}>{busy ? <Loader2 size={16} className="spin"/> : <Play size={16}/>}Run</button>
+    </div>
+    <p className="duty-ref"><CircleHelp size={13}/> Standard tariff currently: <b>{ref != null ? `${ref}%` : "…"}</b>{refLane && <span>· HS {refLane.hsCode} · {refLane.product} · {destination ? `${refLane.origin} → ${refLane.destination}` : `volume-weighted across ${lanes.data?.lanes.length ?? 0} lanes from ${refLane.origin}`}</span>}<span className="muted">(indicative MFN reference rate)</span></p>
+    <input className="sim-range" type="range" min="0" max={maxSlider} step="0.5" value={duty} onChange={e => setDuty(+e.target.value)}/>
+
+    {sim && <>
+      <div className="sim-tiles">
+        <article><small>WEIGHTED LANDED PRICE CHANGE</small><strong className={sim.summary.direction}>{sign(sim.summary.weightedDeltaPct)}%</strong><p>${sim.summary.weightedCurrent.toLocaleString()} → ${sim.summary.weightedSimulated.toLocaleString()} {sim.lanes[0]?.unit}</p></article>
+        <article><small>DUTY CHANGE</small><strong>{sign(Math.round((sim.dutyPct - sim.referenceDutyPct) * 100) / 100)} pts</strong><p>{sim.referenceDutyPct}% today → {sim.dutyPct}% simulated</p></article>
+        <article><small>EST. TRADE VOLUME SHIFT</small><strong className={sim.summary.volumeDeltaPct < 0 ? "up" : sim.summary.volumeDeltaPct > 0 ? "down" : ""}>{sign(sim.summary.volumeDeltaPct)}%</strong><p>Elasticity {sim.elasticity}, illustrative</p></article>
+        <article><small>COUNTRIES AFFECTED</small><strong>{sim.byDestination.length}</strong><p>{sim.byDestination.map(d => d.code).join(" · ")}</p></article>
+      </div>
+      <h4 className="sub-h">Price impact by importing country</h4>
+      <div className="dest-grid">{sim.byDestination.map(d => <article key={d.code}><b>{d.name}</b><small>duty {d.currentDutyPct}% → {sim.dutyPct}% · {d.lanes} lane{d.lanes > 1 ? "s" : ""}</small><strong className={d.deltaPct > 0 ? "up" : d.deltaPct < 0 ? "down" : ""} style={{ color: d.deltaPct > 0 ? "var(--red)" : d.deltaPct < 0 ? "var(--teal)" : undefined }}>{sign(d.deltaPct)}%</strong><small>${d.currentLanded.toLocaleString()} → ${d.simulatedLanded.toLocaleString()}</small></article>)}</div>
+      <h4 className="sub-h">Trade lanes</h4>
+      <div className="lane-table">
+        <div className="head"><span>LANE</span><span>DUTY TODAY</span><span>CURRENT LANDED</span><span>SIMULATED</span><span>CHANGE</span><span>VOLUME SHARE</span></div>
+        {sim.lanes.map(l => <div key={l.id}><span><b>{l.origin} → {l.destination}</b><small>{l.product} · HS {l.hsCode} · {l.unit}</small></span><span>{l.currentDutyPct}%<br/><small>{l.note ?? ""}</small></span><span>${l.currentLanded.toLocaleString()}</span><span>${l.simulatedLanded.toLocaleString()}</span><span className={l.direction}>{sign(l.deltaPct)}%<br/><small>{sign(l.delta).replace("+", "+$").replace("-", "-$")}</small></span><span><div className="lane-bar"><i className={l.direction} style={{ width: `${Math.min(100, l.volumeShare * 100 * 2)}%` }}/></div><small>{Math.round(l.volumeShare * 100)}% of flow</small></span></div>)}
+      </div>
+      <h4 className="sub-h">Landed-price index vs. tariff rate (0 = today)</h4>
+      <div className="index-chart"><svg viewBox="0 0 500 120" preserveAspectRatio="none">{pts.length > 1 && <><path className="area" d={`M0,110 L${pts.join(" L")} L500,110 Z`}/><path d={`M${pts.join(" L")}`}/></>}<line x1={(sim.dutyPct / sim.maxDutyPct) * 500} x2={(sim.dutyPct / sim.maxDutyPct) * 500} y1="0" y2="110"/></svg></div>
+      <p className="disclaimer"><AlertTriangle size={14}/>{sim.disclaimer}</p>
+    </>}
+  </section>;
+}
+
+/* ---------- Chain simulation: the GaN journey on a real map ---------- */
+const STAGE_COLOR: Record<string, string> = { MINING: "#f59e0b", REFINING: "#ef4444", MANUFACTURING: "#3b82f6", LOGISTICS: "#14b8a6", ASSEMBLY: "#8b5cf6", END_USE: "#22c55e" };
+const MODE_STYLE: Record<string, { color: string; dash?: string }> = { sea: { color: "#14b8a6" }, air: { color: "#f59e0b", dash: "6 8" }, road: { color: "#94a3b8", dash: "2 6" }, rail: { color: "#94a3b8", dash: "8 6" }, site: { color: "#fff" } };
+const SPEEDS = [0.5, 1, 2, 4];
+// Keyless tile sources (no API key, free for attributed use). Esri dark canvas is the default.
+const BASEMAPS: Record<string, { label: string; url: string; attr: string; maxZoom: number; subdomains?: string }> = {
+  dark: { label: "Dark", url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", attr: "Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ", maxZoom: 16 },
+  streets: { label: "Streets", url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", attr: "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors", maxZoom: 19 },
+  satellite: { label: "Satellite", url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", attr: "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics", maxZoom: 18 },
+};
+
+function ChainSimulation({ setPage, setSelected }: { setPage: (p: Page) => void; setSelected: (s: string) => void }) {
+  const data = useApi(() => fetchJourney(MATERIAL));
+  const j = data.data;
+  return <><PageTitle title="Chain Simulation" sub={j ? `${j.material.name}: from ore to antenna across ${j.countries.length} countries in about ${j.totalDays} days.` : "From mine to end use, on the real map."} action={j?.material.name ?? "Gallium Nitride (GaN)"}/>
+    <ApiError message={data.error}/>
+    {j ? <JourneyMap journey={j} onInspect={(slug) => { setSelected(slug); setPage("Supply Chain Explorer"); }}/> : <Busy text="Loading journey…"/>}
+    <p className="journey-attr">{j?.attribution ?? ""}</p>
+  </>;
+}
+
+function JourneyMap({ journey, onInspect }: { journey: Journey; onInspect: (slug: string) => void }) {
+  const mapEl = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const layerRef = useRef<{ mover: L.Marker; trail: L.Polyline; pins: L.Marker[]; routes: L.Polyline[] } | null>(null);
+  const [step, setStep] = useState(0);
+  const [progress, setProgress] = useState(0); // 0..1 within the current step
+  const [playing, setPlaying] = useState(true);
+  const [speed, setSpeed] = useState(1);
+  const [basemap, setBasemap] = useState<keyof typeof BASEMAPS>("dark");
+  const tileRef = useRef<L.TileLayer | null>(null);
+  const stateRef = useRef({ step: 0, progress: 0, playing: true, speed: 1 });
+  stateRef.current = { step, progress, playing, speed };
+  const steps = journey.steps;
+
+  // Swap the basemap without rebuilding the map
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    tileRef.current?.remove();
+    const b = BASEMAPS[basemap];
+    tileRef.current = L.tileLayer(b.url, { attribution: b.attr, maxZoom: b.maxZoom, crossOrigin: true }).addTo(map);
+    tileRef.current.bringToBack();
+  }, [basemap]);
+
+  // Build the map once
+  useEffect(() => {
+    if (!mapEl.current || mapRef.current) return;
+    const map = L.map(mapEl.current, { zoomControl: true, attributionControl: true, worldCopyJump: true, minZoom: 2 });
+    const b = BASEMAPS.dark;
+    tileRef.current = L.tileLayer(b.url, { attribution: b.attr, maxZoom: b.maxZoom, crossOrigin: true }).addTo(map);
+    const routes = steps.filter(s => s.path.length > 1).map(s => L.polyline(s.path, { color: MODE_STYLE[s.mode]?.color ?? "#fff", weight: 2, opacity: 0.35, dashArray: MODE_STYLE[s.mode]?.dash }).addTo(map));
+    const places = new Map<string, Journey["steps"][number]["from"]>();
+    steps.forEach(s => { if (s.from) places.set(s.from.slug, s.from); if (s.to) places.set(s.to.slug, s.to); });
+    const pins = [...places.values()].filter((p): p is NonNullable<typeof p> => !!p && p.lat != null && p.lng != null).map(p => {
+      const stage = steps.find(s => s.from?.slug === p.slug && s.mode === "site")?.stage ?? "LOGISTICS";
+      const m = L.marker([p.lat!, p.lng!], { icon: L.divIcon({ className: "", html: `<div class="jm-pin" style="color:${STAGE_COLOR[stage] ?? "#14b8a6"}"></div>`, iconSize: [14, 14], iconAnchor: [7, 7] }) }).addTo(map);
+      m.bindTooltip(`<b>${p.name}</b><br>${p.region ?? ""}${p.isChokepoint ? " · chokepoint" : ""}`, { direction: "top", offset: [0, -10], className: "jm-label", opacity: 1 });
+      m.on("click", () => onInspect(p.slug));
+      return m;
+    });
+    const trail = L.polyline([], { color: "#3b82f6", weight: 3.5, opacity: 0.95 }).addTo(map);
+    const mover = L.marker(steps[0]?.path[0] ?? [0, 0], { icon: L.divIcon({ className: "", html: '<div class="jm-mover"></div>', iconSize: [18, 18], iconAnchor: [9, 9] }), zIndexOffset: 1000 }).addTo(map);
+    if (journey.bounds) map.fitBounds([[journey.bounds.south, journey.bounds.west], [journey.bounds.north, journey.bounds.east]], { padding: [40, 40] });
+    mapRef.current = map;
+    layerRef.current = { mover, trail, pins, routes };
+    setTimeout(() => map.invalidateSize(), 50);
+    return () => { map.remove(); mapRef.current = null; layerRef.current = null; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Animation loop: travel steps move the marker along the path; site steps dwell with a pulse
+  useEffect(() => {
+    let raf = 0, last = performance.now();
+    const tick = (now: number) => {
+      raf = requestAnimationFrame(tick);
+      const dt = Math.min(0.1, (now - last) / 1000); last = now;
+      const st = stateRef.current;
+      if (!st.playing) return;
+      const s = steps[st.step];
+      if (!s) return;
+      const secs = s.path.length > 1 ? 3 + Math.min(6, s.durationDays * 0.3) : 2.4; // seconds per step at 1x
+      let p = st.progress + (dt * st.speed) / secs;
+      if (p >= 1) {
+        if (st.step + 1 < steps.length) { setStep(st.step + 1); setProgress(0); }
+        else { setProgress(1); setPlaying(false); }
+        return;
+      }
+      setProgress(p);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [steps]);
+
+  // Draw the marker + trail for the current step/progress
+  useEffect(() => {
+    const ly = layerRef.current, map = mapRef.current;
+    if (!ly || !map) return;
+    const s = steps[step];
+    if (!s) return;
+    const done = steps.slice(0, step).flatMap(x => x.path);
+    if (s.path.length > 1) {
+      const pts = s.path.map(([a, b]) => L.latLng(a, b));
+      const lens = pts.slice(1).map((p, i) => pts[i].distanceTo(p));
+      const total = lens.reduce((a, b) => a + b, 0) || 1;
+      let target = progress * total, i = 0;
+      while (i < lens.length - 1 && target > lens[i]) { target -= lens[i]; i++; }
+      const f = lens[i] ? Math.min(1, target / lens[i]) : 1;
+      const pos = L.latLng(pts[i].lat + (pts[i + 1].lat - pts[i].lat) * f, pts[i].lng + (pts[i + 1].lng - pts[i].lng) * f);
+      ly.mover.setLatLng(pos);
+      ly.trail.setLatLngs([...done.map(([a, b]) => L.latLng(a, b)), ...pts.slice(0, i + 1), pos]);
+      if (!map.getBounds().pad(-0.2).contains(pos)) map.panTo(pos, { animate: true, duration: 0.6 });
+    } else if (s.path.length === 1) {
+      ly.mover.setLatLng(s.path[0]);
+      ly.trail.setLatLngs(done.map(([a, b]) => L.latLng(a, b)));
+      const el = ly.mover.getElement()?.firstElementChild as HTMLElement | null;
+      if (el) el.style.borderColor = STAGE_COLOR[s.stage] ?? "#3b82f6";
+    }
+    ly.routes.forEach((r, k) => { const idx = steps.filter(x => x.path.length > 1).indexOf(steps.filter(x => x.path.length > 1)[k]); r.setStyle({ opacity: idx <= steps.slice(0, step + 1).filter(x => x.path.length > 1).length - 1 ? 0.25 : 0.45 }); });
+  }, [step, progress, steps]);
+
+  const jump = (i: number) => { setStep(i); setProgress(0); setPlaying(true); };
+  const s = steps[step];
+  const overall = steps.length ? (step + progress) / steps.length : 0;
+  const dayAt = steps.slice(0, step).reduce((a, x) => a + x.durationDays, 0) + Math.round((s?.durationDays ?? 0) * progress);
+  return <div className="journey">
+    <div className="journey-map" ref={mapEl}/>
+    <aside className="journey-side">
+      <div className="journey-now"><small>STEP {step + 1} OF {steps.length} · {s?.stage.replace("_", " ")} · DAY {dayAt}</small><h3>{s?.title}</h3><p>{s?.description}</p></div>
+      <div className="journey-controls">
+        <button className="btn primary" onClick={() => setPlaying(p => !p)}>{playing ? <Pause size={15}/> : <Play size={15}/>}{playing ? "Pause" : "Play"}</button>
+        <button className="btn secondary" onClick={() => jump(Math.min(steps.length - 1, step + 1))}><SkipForward size={15}/></button>
+        <button className="btn secondary" onClick={() => jump(0)}><RotateCcw size={15}/></button>
+        <select value={speed} onChange={e => setSpeed(+e.target.value)}>{SPEEDS.map(x => <option key={x} value={x}>{x}× speed</option>)}</select>
+        <select value={basemap} onChange={e => setBasemap(e.target.value as keyof typeof BASEMAPS)} title="Basemap">{Object.entries(BASEMAPS).map(([k, b]) => <option key={k} value={k}>{b.label}</option>)}</select>
+      </div>
+      <div className="journey-progress"><i style={{ width: `${overall * 100}%` }}/></div>
+      <ol className="journey-steps">{steps.map((x, i) => <li key={x.order} className={i === step ? "active" : i < step ? "done" : ""} onClick={() => jump(i)}><span className="n">{i + 1}</span><span><b>{x.title}</b><small>{x.from?.name}{x.to ? ` → ${x.to.name}` : ""} · {x.mode}</small></span><span className="d">{x.durationDays ? `${x.durationDays} d` : "–"}</span></li>)}</ol>
+      <div className="journey-legend"><span><i style={{ background: MODE_STYLE.sea.color }}/>Sea</span><span><i style={{ background: MODE_STYLE.air.color }}/>Air</span><span><i style={{ background: MODE_STYLE.road.color }}/>Road</span><span><i style={{ background: "#3b82f6" }}/>Travelled</span></div>
+    </aside>
+  </div>;
 }
 
 function GenericPage({ page, setPage, selected, setSelected }: { page: Page; setPage: (p: Page) => void; selected: string; setSelected: (s: string) => void }) {

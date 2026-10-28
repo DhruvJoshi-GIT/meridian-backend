@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma";
 import { parse } from "../lib/validate";
 import { requireAuth } from "../middleware/auth";
 import { calculateTariff } from "../services/tariff";
+import { laneSummary, simulateTariff } from "../services/tariffSim";
 import { notFound } from "../lib/errors";
 
 export const tariffsRouter = Router();
@@ -34,6 +35,20 @@ tariffsRouter.get("/options", (_req, res) => {
     ],
     defaults: { origin: "Singapore", destination: "United Kingdom", product: "Gallium nitride wafers", hsCode: "3818.00", dutyPct: 10, baseCost: 100000, freight: 6500, insurance: 1800, maxDutyPct: 30 },
   });
+});
+
+/** Trade lanes for a material with the indicative current duty on each (tariff simulator). */
+tariffsRouter.get("/lanes", async (req, res) => {
+  const { material } = parse(z.object({ material: z.string().default("gallium-nitride") }), req.query);
+  const [summary, materials] = await Promise.all([laneSummary(material), prisma.tradeLane.findMany({ select: { materialSlug: true }, distinct: ["materialSlug"] })]);
+  const names = await prisma.material.findMany({ where: { slug: { in: materials.map((m) => m.materialSlug) } }, select: { slug: true, name: true }, orderBy: { name: "asc" } });
+  res.json({ ...summary, materials: names });
+});
+
+/** What happens to landed prices across countries if the duty on a material moves to X%. */
+tariffsRouter.post("/simulate", async (req, res) => {
+  const body = parse(z.object({ material: z.string().default("gallium-nitride"), dutyPct: z.coerce.number().min(0).max(500), destination: z.string().optional(), elasticity: z.coerce.number().max(0).optional() }), req.body ?? {});
+  res.json(await simulateTariff(body));
 });
 
 /** Stateless calculation (called as the duty slider moves). */

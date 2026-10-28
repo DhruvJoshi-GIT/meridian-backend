@@ -11,6 +11,8 @@ const daysAgo = (d: number) => new Date(Date.now() - d * 86400_000);
 async function main() {
   console.log("Resetting data...");
   await prisma.$transaction([
+    prisma.tradeLane.deleteMany(),
+    prisma.journeyStep.deleteMany(),
     prisma.activity.deleteMany(),
     prisma.report.deleteMany(),
     prisma.tariffScenario.deleteMany(),
@@ -63,7 +65,7 @@ async function main() {
   // ---------- Entities ----------
   type E = Parameters<typeof prisma.entity.create>[0]["data"];
   const entitiesData: E[] = [
-    { slug: "bauxite-feedstock", name: "Bauxite feedstock", type: "RAW_MATERIAL", typeLabel: "Raw material", region: "Australia", country: "AU", lat: -22.5, lng: 118.0, mapX: 11, mapY: 72, risk: "low", dependencyScore: 22, confidence: "High", evidenceStatus: "Documented", description: "Primary bauxite mining and alumina refining feedstock." },
+    { slug: "bauxite-feedstock", name: "Bauxite feedstock", type: "RAW_MATERIAL", typeLabel: "Raw material", region: "Weipa, Queensland, Australia", country: "AU", lat: -12.68, lng: 141.88, mapX: 11, mapY: 72, risk: "low", dependencyScore: 22, confidence: "High", evidenceStatus: "Documented", description: "Primary bauxite mining and alumina refining feedstock." },
     { slug: "coastal-refining", name: "Coastal Refining", type: "PROCESSING", typeLabel: "Processing", region: "East Asia (illustrative)", country: "CN", lat: 30.6, lng: 121.5, mapX: 21, mapY: 48, risk: "high", dependencyScore: 82, confidence: "Moderate", evidenceStatus: "Inferred", evidenceNote: "Derived from documented trade flows and processing capacity estimates.", description: "Gallium processing facility" },
     { slug: "inland-gallium-processing", name: "Inland Gallium Processing", type: "PROCESSING", typeLabel: "Processing", region: "East Asia (illustrative)", country: "CN", lat: 34.3, lng: 108.9, mapX: 27, mapY: 40, risk: "high", dependencyScore: 74, confidence: "Low", evidenceStatus: "Estimated", evidenceNote: "Capacity estimated from regional alumina output.", description: "Secondary gallium extraction and 4N refining" },
     { slug: "pacific-gan-works", name: "Pacific GaN Works", type: "MANUFACTURER", typeLabel: "Manufacturer", region: "Singapore", country: "SG", lat: 1.35, lng: 103.8, mapX: 38, mapY: 34, risk: "medium", dependencyScore: 69, confidence: "High", evidenceStatus: "Documented", description: "GaN epitaxy and wafer manufacturing" },
@@ -74,7 +76,7 @@ async function main() {
     { slug: "nordic-semiconductors", name: "Nordic Semiconductors", type: "SUPPLIER", typeLabel: "Supplier", region: "Norway", country: "NO", lat: 59.9, lng: 10.7, mapX: 72, mapY: 38, risk: "low", dependencyScore: 41, confidence: "High", evidenceStatus: "Documented", description: "RF front-end module supplier" },
     { slug: "nordic-semi-materials", name: "Nordic Semi Materials", type: "SUPPLIER", typeLabel: "Supplier", region: "Finland", country: "FI", lat: 60.2, lng: 24.9, mapX: 75, mapY: 30, risk: "low", dependencyScore: 43, confidence: "Moderate", evidenceStatus: "Documented", description: "Qualified alternative gallium supplier (recovery from zinc residues)" },
     { slug: "secondary-recovery-hub", name: "Secondary Recovery Hub", type: "SUPPLIER", typeLabel: "Recycling", region: "Germany", country: "DE", lat: 51.2, lng: 6.8, mapX: 69, mapY: 36, risk: "low", dependencyScore: 30, confidence: "Moderate", evidenceStatus: "Inferred", description: "Scrap GaN and gallium recovery" },
-    { slug: "aegis-radar-programme", name: "Aegis Radar Programme", type: "END_USE", typeLabel: "End use", region: "United Kingdom", country: "GB", lat: 51.5, lng: -0.1, mapX: 86, mapY: 54, risk: "medium", dependencyScore: 61, confidence: "High", evidenceStatus: "Documented", description: "Defence electronics" },
+    { slug: "aegis-radar-programme", name: "Aegis Radar Programme", type: "END_USE", typeLabel: "End use", region: "Portsmouth, United Kingdom", country: "GB", lat: 50.8, lng: -1.09, mapX: 86, mapY: 54, risk: "medium", dependencyScore: 61, confidence: "High", evidenceStatus: "Documented", description: "Defence electronics" },
     { slug: "ew-suite-programme", name: "Electronic Warfare Suite", type: "END_USE", typeLabel: "End use", region: "United Kingdom", country: "GB", lat: 52.2, lng: -1.5, mapX: 88, mapY: 62, risk: "medium", dependencyScore: 58, confidence: "Moderate", evidenceStatus: "Documented" },
     { slug: "grid-power-electronics", name: "Grid Power Electronics Programme", type: "END_USE", typeLabel: "End use", region: "Germany", country: "DE", lat: 48.1, lng: 11.6, mapX: 82, mapY: 44, risk: "low", dependencyScore: 39, confidence: "Moderate", evidenceStatus: "Inferred" },
     { slug: "ge-refinery-east", name: "Eastern Germanium Refinery", type: "PROCESSING", typeLabel: "Processing", region: "East Asia (illustrative)", country: "CN", lat: 25.0, lng: 102.7, mapX: 24, mapY: 56, risk: "high", dependencyScore: 77, confidence: "Low", evidenceStatus: "Estimated" },
@@ -292,7 +294,60 @@ async function main() {
     ],
   });
 
-  console.log(`Seeded: ${materialsData.length} materials, ${entitiesData.length} entities, ${links.length} links, chain ${chain.id}`);
+
+  // ---------- Trade lanes (tariff simulator) ----------
+  // currentDutyPct = indicative MFN reference rate; the UI labels it as such. Verify with customs before use.
+  const lane = (materialSlug: string, product: string, hsCode: string, origin: string, originCode: string, unit: string, baseCost: number, freight: number, insurance: number, rows: [string, string, number, number, string][]) =>
+    rows.map(([destination, destinationCode, currentDutyPct, volumeShare, note]) => ({ materialSlug, product, hsCode, origin, originCode, destination, destinationCode, unit, baseCost, freight, insurance, currentDutyPct, volumeShare, note }));
+  await prisma.tradeLane.createMany({
+    data: [
+      ...lane("gallium-nitride", "GaN epitaxial wafers", "3818.00", "Singapore", "SG", "per 100-wafer lot", 100000, 6500, 1800, [
+        ["United Kingdom", "GB", 0, 0.30, "ITA-covered semiconductor material"], ["United States", "US", 0, 0.25, "ITA-covered"], ["Germany", "DE", 0, 0.20, "ITA-covered"],
+        ["Japan", "JP", 0, 0.10, "ITA-covered"], ["South Korea", "KR", 0, 0.10, "ITA-covered"], ["India", "IN", 7.5, 0.05, "Basic customs duty, indicative"],
+      ]),
+      ...lane("gallium-6n", "6N gallium metal", "8112.92", "China", "CN", "per tonne", 650000, 12000, 3000, [
+        ["United States", "US", 3, 0.25, "Indicative MFN"], ["United Kingdom", "GB", 2, 0.15, "Indicative UK Global Tariff"], ["Germany", "DE", 3, 0.20, "Indicative EU CCT"],
+        ["Japan", "JP", 3, 0.20, "Indicative MFN"], ["South Korea", "KR", 3, 0.10, "Indicative MFN"], ["India", "IN", 5, 0.10, "Indicative"],
+      ]),
+      ...lane("gallium", "Crude gallium (4N)", "8112.92", "China", "CN", "per tonne", 420000, 12000, 2500, [
+        ["Finland", "FI", 3, 0.35, "Refined onward to 6N"], ["Germany", "DE", 3, 0.30, "Indicative EU CCT"], ["Japan", "JP", 3, 0.20, "Indicative MFN"], ["United States", "US", 3, 0.15, "Indicative MFN"],
+      ]),
+      ...lane("germanium", "Germanium dioxide and metal", "8112.92", "China", "CN", "per tonne", 2100000, 14000, 5000, [
+        ["United States", "US", 2.6, 0.35, "Indicative MFN"], ["Germany", "DE", 3, 0.30, "Indicative EU CCT"], ["Japan", "JP", 3, 0.20, "Indicative MFN"], ["United Kingdom", "GB", 2, 0.15, "Indicative"],
+      ]),
+      ...lane("rare-earths", "Rare-earth compounds", "2846.90", "China", "CN", "per tonne", 45000, 2200, 400, [
+        ["United States", "US", 5, 0.30, "Indicative MFN"], ["Germany", "DE", 0, 0.25, "EU duty-free"], ["Japan", "JP", 0, 0.30, "Duty-free"], ["South Korea", "KR", 0, 0.15, "Duty-free"],
+      ]),
+      ...lane("silicon-carbide", "SiC substrates", "3818.00", "Taiwan", "TW", "per 100-wafer lot", 150000, 6000, 2000, [
+        ["United States", "US", 0, 0.35, "ITA-covered"], ["Germany", "DE", 0, 0.30, "ITA-covered"], ["United Kingdom", "GB", 0, 0.15, "ITA-covered"], ["Japan", "JP", 0, 0.20, "ITA-covered"],
+      ]),
+      ...lane("cobalt", "Refined cobalt metal", "8105.20", "Finland", "FI", "per tonne", 33000, 1500, 300, [
+        ["United States", "US", 0, 0.30, "Indicative MFN"], ["Germany", "DE", 0, 0.30, "Intra-EU, no duty"], ["South Korea", "KR", 3, 0.25, "Indicative MFN"], ["Japan", "JP", 3, 0.15, "Indicative MFN"],
+      ]),
+    ],
+  });
+
+  // ---------- Journey (chain simulation on the real map) ----------
+  const J = (order: number, stage: string, title: string, description: string, mode: string, durationDays: number, from: string | null, to: string | null, waypoints: [number, number][] | null) =>
+    ({ materialSlug: "gallium-nitride", order, stage, title, description, mode, durationDays, fromEntityId: from ? E(from) : null, toEntityId: to ? E(to) : null, waypoints: waypoints ? JSON.stringify(waypoints) : null });
+  await prisma.journeyStep.createMany({
+    data: [
+      J(0, "MINING", "Bauxite mined at Weipa", "Gallium is never mined on its own. It rides along in bauxite at roughly 50 parts per million, so the GaN story starts at an aluminium ore mine on the Gulf of Carpentaria.", "site", 0, "bauxite-feedstock", null, null),
+      J(1, "LOGISTICS", "Bulk carrier to East Asia", "Bauxite ships north through the Torres Strait, past the Philippines and up to a coastal refinery. About 18 days at sea.", "sea", 18, "bauxite-feedstock", "coastal-refining", [[-10.6, 142.3], [-5.5, 133.0], [0.5, 128.5], [6.0, 126.5], [14.0, 123.0], [20.5, 121.0], [26.0, 122.5]]),
+      J(2, "REFINING", "Gallium extracted and refined to 6N", "During alumina refining (the Bayer process) gallium concentrates in the liquor. It is recovered electrolytically, then refined to 99.9999% purity. This is where supply concentrates: two processors carry 68% of the modeled flow.", "site", 30, "coastal-refining", null, null),
+      J(3, "LOGISTICS", "Air freight to Singapore", "High-purity gallium is light and valuable, so it flies. One day door to door.", "air", 1, "coastal-refining", "pacific-gan-works", null),
+      J(4, "MANUFACTURING", "GaN epitaxy and wafer fabrication", "Gallium reacts with ammonia-derived nitrogen in MOCVD reactors to grow gallium nitride layers on substrates. Wafers are patterned, tested and diced. About six weeks.", "site", 45, "pacific-gan-works", null, null),
+      J(5, "LOGISTICS", "Truck to the Port of Singapore", "Finished wafer lots move a few kilometres to the container terminal.", "road", 1, "pacific-gan-works", "port-of-singapore", null),
+      J(6, "LOGISTICS", "Malacca Strait and the Indian Ocean", "The monitored chokepoint. Containers head north-west through the Strait of Malacca, round Sri Lanka and cross to the Gulf of Aden and the Red Sea.", "sea", 16, "port-of-singapore", "suez-canal", [[2.5, 101.5], [5.8, 97.4], [6.0, 80.0], [11.5, 56.0], [12.5, 48.0], [12.6, 43.4], [16.5, 41.0], [21.5, 38.2], [27.6, 34.2], [29.9, 32.6]]),
+      J(7, "LOGISTICS", "Suez to Rotterdam", "Through the canal, across the Mediterranean, out past Gibraltar and up the Atlantic coast to the largest port in Europe.", "sea", 12, "suez-canal", "port-of-rotterdam", [[31.3, 32.3], [34.8, 25.0], [36.4, 15.0], [37.6, 10.5], [37.0, 2.0], [36.0, -5.6], [37.0, -9.6], [43.8, -9.6], [48.6, -5.6], [50.1, -1.0], [51.0, 1.6], [51.95, 3.5]]),
+      J(8, "LOGISTICS", "Short-sea leg to Oslo", "Wafers transship at Rotterdam and continue by feeder vessel across the North Sea and up the Oslofjord.", "sea", 3, "port-of-rotterdam", "nordic-semiconductors", [[52.5, 3.8], [55.5, 6.5], [57.6, 8.4], [59.0, 10.6]]),
+      J(9, "ASSEMBLY", "RF front-end modules assembled", "GaN dies are packaged into transmit/receive modules, then burned in and RF-tested. Three weeks.", "site", 20, "nordic-semiconductors", null, null),
+      J(10, "LOGISTICS", "Air freight to the United Kingdom", "Tested modules fly to the integration site.", "air", 1, "nordic-semiconductors", "aegis-radar-programme", null),
+      J(11, "END_USE", "Integrated into the radar array", "Thousands of GaN modules make up an active electronically scanned array. From ore to antenna: roughly 150 days and five countries.", "site", 0, "aegis-radar-programme", null, null),
+    ],
+  });
+
+  console.log(`Seeded: ${materialsData.length} materials, ${entitiesData.length} entities, ${links.length} links, chain ${chain.id}, ${await prisma.tradeLane.count()} trade lanes, ${await prisma.journeyStep.count()} journey steps`);
   console.log("Demo login: alex.morgan@meridian.local / meridian123");
 }
 

@@ -20,6 +20,7 @@ import { dependencyRouter } from "./routes/dependency";
 import { alternativesRouter } from "./routes/alternatives";
 import { reportsRouter } from "./routes/reports";
 import { dataSourcesRouter } from "./routes/dataSources";
+import { journeyRouter } from "./routes/journey";
 
 export function createApp() {
   const app = express();
@@ -53,6 +54,7 @@ export function createApp() {
   app.use("/api/alternatives", alternativesRouter);
   app.use("/api/reports", reportsRouter);
   app.use("/api/data-sources", dataSourcesRouter);
+  app.use("/api/journey", journeyRouter);
 
   app.use((_req, res) => res.status(404).json({ error: "Not found" }));
   app.use(errorHandler);

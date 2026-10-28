@@ -277,3 +277,41 @@ model DataSource {
   lastUpdatedAt DateTime @default(now())
   note          String?
 }
+
+// Tariff simulator: one row per origin -> destination lane for a material
+model TradeLane {
+  id              String  @id @default(cuid())
+  materialSlug    String
+  product         String // what actually ships, e.g. "GaN epitaxial wafers"
+  hsCode          String
+  origin          String
+  originCode      String
+  destination     String
+  destinationCode String
+  unit            String // "per 100-wafer lot", "per tonne"
+  baseCost        Float // ex-works value per unit, USD
+  freight         Float
+  insurance       Float
+  currentDutyPct  Float // indicative MFN reference rate, verify with customs
+  volumeShare     Float   @default(0) // share of this material's modeled trade on this lane
+  note            String?
+
+  @@index([materialSlug])
+}
+
+// Chain simulation: ordered journey of a material across the real map
+model JourneyStep {
+  id           String  @id @default(cuid())
+  materialSlug String
+  order        Int
+  stage        String // MINING | REFINING | MANUFACTURING | LOGISTICS | ASSEMBLY | END_USE
+  title        String
+  description  String
+  mode         String // site | sea | air | road | rail
+  durationDays Int     @default(0)
+  fromEntityId String?
+  toEntityId   String?
+  waypoints    String? // JSON [[lat,lng],...] between from and to (sea routes around coasts)
+
+  @@unique([materialSlug, order])
+}

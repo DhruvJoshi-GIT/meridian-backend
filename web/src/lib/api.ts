@@ -75,3 +75,22 @@ export const api = {
   generateReport: (input: { type?: string; title?: string; materialSlug?: string; simulationId?: string } = {}) => request<{ report: Report }>("/reports/generate", { method: "POST", json: input }),
   reportDownloadUrl: (id: string) => `${BASE}/reports/${id}/download`,
 };
+
+// ---- Tariff simulator + chain simulation ----
+export interface TradeLane { id: string; materialSlug: string; product: string; hsCode: string; origin: string; originCode: string; destination: string; destinationCode: string; unit: string; baseCost: number; freight: number; insurance: number; currentDutyPct: number; volumeShare: number; note: string | null }
+export interface SimLane extends Omit<TradeLane, "materialSlug"> { simulatedDutyPct: number; currentLanded: number; simulatedLanded: number; delta: number; deltaPct: number; dutyDeltaPct: number; volumeDeltaPct: number; direction: "up" | "down" | "flat" }
+export interface TariffSimulation {
+  material: { slug: string; name: string }; dutyPct: number; destination: string | null; referenceDutyPct: number; elasticity: number;
+  summary: { lanes: number; weightedDeltaPct: number; weightedCurrent: number; weightedSimulated: number; volumeDeltaPct: number; direction: "up" | "down" | "flat" };
+  lanes: SimLane[]; byDestination: { code: string; name: string; lanes: number; currentDutyPct: number; currentLanded: number; simulatedLanded: number; deltaPct: number; volumeDeltaPct: number }[];
+  curve: { dutyPct: number; indexPct: number }[]; maxDutyPct: number; disclaimer: string;
+}
+export interface JourneyPlace { id: string; slug: string; name: string; typeLabel: string; region: string | null; country: string | null; risk: Risk; lat: number | null; lng: number | null; isChokepoint: boolean }
+export interface JourneyStep { order: number; stage: string; title: string; description: string; mode: "site" | "sea" | "air" | "road" | "rail"; durationDays: number; from: JourneyPlace | null; to: JourneyPlace | null; path: [number, number][] }
+export interface Journey { material: { slug: string; name: string }; steps: JourneyStep[]; totalDays: number; countries: string[]; bounds: { south: number; north: number; west: number; east: number } | null; attribution: string }
+
+export const tariffSim = {
+  lanes: (material: string) => request<{ material: { slug: string; name: string }; lanes: TradeLane[]; referenceDutyPct: number; destinations: { code: string; name: string; currentDutyPct: number }[]; hsCodes: string[]; materials: { slug: string; name: string }[] }>("/tariffs/lanes?material=" + encodeURIComponent(material)),
+  simulate: (input: { material: string; dutyPct: number; destination?: string; elasticity?: number }) => request<TariffSimulation>("/tariffs/simulate", { method: "POST", json: input }),
+};
+export const journey = (material = "gallium-nitride") => request<Journey>("/journey?material=" + encodeURIComponent(material));

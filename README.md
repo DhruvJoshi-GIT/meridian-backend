@@ -286,9 +286,16 @@ Model: `shortfall = reduction × entity supply share × scenario severity`; onse
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/tariffs/options` | Origins, destinations, products with HS codes, defaults |
+| GET | `/api/tariffs/lanes?material=` | **Tariff simulator.** Every origin → destination trade lane for a material with its indicative current duty, the volume-weighted reference duty, and the list of simulatable materials |
+| POST | `/api/tariffs/simulate` | `{material, dutyPct, destination?, elasticity?}` → landed price today vs. simulated on every lane, aggregated by importing country, weighted summary, estimated volume shift, and a 0..N% price-index curve |
 | POST | `/api/tariffs/calculate` | `{dutyPct, baseCost?, freight?, insurance?, ...}` → current vs scenario landed cost, delta, 0 to 30 % curve. Stateless. |
 | POST | `/api/tariffs/scenarios` | Save a scenario |
 | GET | `/api/tariffs/scenarios` / `/:id` | |
+
+### Chain Simulation
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/journey?material=gallium-nitride` | Ordered mine-to-end-use journey with real coordinates: each step has a stage, mode (site / sea / air / road), duration, and a lat/lng path including sea-route waypoints. The frontend animates it on a Leaflet map with keyless Esri / OpenStreetMap tiles. |
 
 ### Reports
 | Method | Path | Notes |
@@ -307,13 +314,13 @@ web/                   React frontend (Figma Make export) -> builds to public/
 web/src/App.tsx        every screen, wired to the API
 web/src/lib/api.ts     typed client for every endpoint
 api/index.ts           Vercel serverless entry (copies the SQLite file to /tmp, exports the app)
-prisma/schema.prisma   data model (14 tables)
+prisma/schema.prisma   data model (16 tables, incl. TradeLane and JourneyStep)
 prisma/seed.ts         demo data matching the Figma design
 prisma/dev.db          seeded SQLite database shipped for the demo
 src/app.ts             Express app + route mounting
 src/index.ts           local server (npm run dev)
 src/routes/*           one router per UI area
-src/services/*         simulation, tariff, dependency (HHI) and report builders
+src/services/*         simulation, tariff, tariffSim (lanes + country impact), dependency (HHI) and report builders
 src/middleware/auth.ts JWT auth with demo-user fallback
 docs/*.svg             Venn diagrams used above
 ```
