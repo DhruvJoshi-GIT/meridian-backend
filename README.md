@@ -2,7 +2,7 @@
 
 REST API behind the Meridian analyst workspace: trace critical materials from origin to end use, score supplier concentration, simulate disruptions, model tariff impact, and generate decision briefs.
 
-**Live API:** https://meridian-backend.vercel.app · **Health:** https://meridian-backend.vercel.app/api/health · **One-call overview:** https://meridian-backend.vercel.app/api/overview
+**Live API:** https://meridian-backend-cyan.vercel.app · **Health:** https://meridian-backend-cyan.vercel.app/api/health · **One-call overview:** https://meridian-backend-cyan.vercel.app/api/overview
 
 Built from a Figma Make frontend ([Build Meridian Supply Chain Intelligence](https://www.figma.com/make/r5qDau9VcXwLoOlmXBcdKY/Build-Meridian-Supply-Chain-Intelligence)): every number the UI shows has an endpoint here, and the Simulator, Tariff and Reports pages run on real calculations instead of hardcoded values.
 
@@ -178,7 +178,7 @@ flowchart TD
     B --> C["npm install<br/>postinstall: prisma generate<br/>(native + rhel-openssl-3.0.x engines)"]
     C --> D["Bundle api/index.ts<br/>includeFiles: prisma/** + .prisma/client/**"]
     D --> E["Serverless function<br/>cold start: copy dev.db -> /tmp/meridian.db"]
-    E --> F["https://meridian-backend.vercel.app"]
+    E --> F["https://meridian-backend-cyan.vercel.app"]
     F -. "durable data?" .-> G["Set DATABASE_URL to Postgres<br/>provider = postgresql · prisma db push · db:seed"]
 ```
 
