@@ -12,7 +12,7 @@
       "destination": "/api"
     }
   ],
-  "buildCommand": "prisma generate && npm --prefix web ci && npm --prefix web run build",
+  "buildCommand": "prisma generate && cd web && npm ci --include=dev && npm run build",
   "outputDirectory": "public",
   "installCommand": "npm ci"
 }
