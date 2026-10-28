@@ -263,7 +263,7 @@ All responses are JSON. Errors: `{ "error": string, "details"?: any }` with 400 
 | GET | `/api/entities/:idOrSlug` | Side-panel detail: materials, dependency score, evidence status, links, projects, alerts |
 | GET | `/api/entities/:idOrSlug/graph?depth=` | Neighbourhood graph `{nodes, edges}` |
 | GET | `/api/supply-chains?material=` | Ordered stages RAW MATERIAL to END USE |
-| GET | `/api/map?material=` | Pins (`mapX/mapY` % and lat/lng), routes, layer list, legend |
+| GET | `/api/map?material=` | Nodes with lat/lng, routes with both endpoints, layer list, legend, and `analytics` (totals, by risk / type / country, corridors with illustrative transit and incident figures, top exposures, 7-day transits) |
 
 ### Dependency Analysis / Alternative Sources
 | Method | Path | Notes |

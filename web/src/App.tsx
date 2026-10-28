@@ -6,7 +6,7 @@ import {
   MapPin, Factory, Route, ShieldCheck, ArrowUpRight, Play, Pause, RotateCcw, SkipForward, Download, Loader2
 } from "lucide-react";
 import L from "leaflet";
-import { api, tariffSim, exporter as exporterApi, journey as fetchJourney, type Alert as AlertT, type Entity, type MapNode, type SimulationResult, type TariffResult, type TariffSimulation, type Journey, type ExporterInput, type ExporterResult, type ExporterCurves, type AbsorberInput, type AbsorberResult } from "./lib/api";
+import { api, tariffSim, exporter as exporterApi, journey as fetchJourney, type Alert as AlertT, type Entity, type MapData, type SimulationResult, type TariffResult, type TariffSimulation, type Journey, type ExporterInput, type ExporterResult, type ExporterCurves, type AbsorberInput, type AbsorberResult } from "./lib/api";
 
 type Page = "Overview" | "Supply Chain Explorer" | "Global Map" | "Chain Simulation" | "Dependency Analysis" | "Disruption Simulator" | "Tariff Intelligence" | "Alternative Sources" | "Reports";
 
@@ -185,27 +185,107 @@ function Overview({ query, setQuery, setPage, selected, setSelected, userName }:
   </>;
 }
 
-/* ---------- Map ---------- */
-function WorldMap({ selected, setSelected, setPage }: { selected: string; setSelected: (s: string) => void; setPage: (p: Page) => void }) {
-  const map = useApi(() => api.map());
+/* ---------- Live map (Leaflet): real coordinates, routes, chokepoints ---------- */
+const RISK_HEX: Record<string, string> = { low: "#14b8a6", medium: "#f59e0b", high: "#ef4444" };
+const TILE_DARK = { url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", attr: "Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ", maxZoom: 16 };
+
+function WorldMap({ selected, setSelected, setPage, material = "all", large = false, onData }: { selected: string; setSelected: (s: string) => void; setPage: (p: Page) => void; material?: string; large?: boolean; onData?: (d: MapData) => void }) {
+  const map = useApi(() => api.map(material), [material]);
   const detail = useApi(() => api.entity(selected).then((r) => r.entity), [selected]);
-  const nodes = map.data?.nodes ?? [];
-  const pos = (n: { mapX: number | null; mapY: number | null }) => [(n.mapX ?? 0) * 10, (n.mapY ?? 0) * 4.4];
+  const el = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const groupRef = useRef<L.LayerGroup | null>(null);
+  const markersRef = useRef<Map<string, L.CircleMarker>>(new Map());
   const e = detail.data;
+  useEffect(() => { if (map.data && onData) onData(map.data); }, [map.data]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Create the map once
+  useEffect(() => {
+    if (!el.current || mapRef.current) return;
+    const m = L.map(el.current, { zoomControl: false, attributionControl: true, worldCopyJump: true, minZoom: 1 });
+    L.tileLayer(TILE_DARK.url, { attribution: TILE_DARK.attr, maxZoom: TILE_DARK.maxZoom }).addTo(m);
+    groupRef.current = L.layerGroup().addTo(m);
+    m.setView([20, 60], 2);
+    mapRef.current = m;
+    setTimeout(() => m.invalidateSize(), 60);
+    return () => { m.remove(); mapRef.current = null; groupRef.current = null; markersRef.current.clear(); };
+  }, []);
+
+  // Redraw nodes + routes when data changes
+  useEffect(() => {
+    const m = mapRef.current, g = groupRef.current, d = map.data;
+    if (!m || !g || !d) return;
+    g.clearLayers(); markersRef.current.clear();
+    for (const r of d.routes) {
+      if (r.from.lat == null || r.to.lat == null) continue;
+      L.polyline([[r.from.lat, r.from.lng!], [r.to.lat, r.to.lng!]], { color: RISK_HEX[r.risk] ?? "#5e8fd3", weight: 1 + r.volumeShare * 3, opacity: r.kind === "inferred" ? 0.45 : 0.7, dashArray: r.kind === "inferred" ? "4 6" : r.kind === "route" ? undefined : "1 0" })
+        .bindTooltip(`${r.from.name} → ${r.to.name}${r.corridor ? `<br>${r.corridor}` : ""}<br>${Math.round(r.volumeShare * 100)}% of flow · ${r.kind}`, { sticky: true, className: "lm-tip", opacity: 1 }).addTo(g);
+    }
+    for (const n of d.nodes) {
+      if (n.lat == null || n.lng == null) continue;
+      if (n.isChokepoint) L.circleMarker([n.lat, n.lng], { radius: 11 + n.dependencyScore / 12, color: n.chokepointStatus === "elevated" ? "#f59e0b" : "#9bacbd", weight: 1, fill: false, dashArray: "3 3", opacity: 0.9, interactive: false }).addTo(g);
+      const mk = L.circleMarker([n.lat, n.lng], { radius: 5 + n.dependencyScore / 12, color: "#fff", weight: n.slug === selected ? 3 : 1, fillColor: RISK_HEX[n.risk], fillOpacity: 0.9 })
+        .bindTooltip(`<b>${n.name}</b><br>${n.typeLabel} · ${n.region ?? ""}<br>dependency ${n.dependencyScore}/100${n.isChokepoint ? ` · chokepoint (${n.chokepointStatus})` : ""}`, { direction: "top", offset: [0, -6], className: "lm-tip", opacity: 1 })
+        .on("click", () => setSelected(n.slug)).addTo(g);
+      markersRef.current.set(n.slug, mk);
+    }
+    const pts = d.nodes.filter(n => n.lat != null).map(n => [n.lat!, n.lng!] as [number, number]);
+    if (pts.length) m.fitBounds(L.latLngBounds(pts), { padding: [30, 30], maxZoom: 5 });
+  }, [map.data]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Highlight the selected node
+  useEffect(() => {
+    markersRef.current.forEach((mk, slug) => mk.setStyle({ weight: slug === selected ? 3 : 1, color: slug === selected ? "#3b82f6" : "#fff" }));
+    const mk = markersRef.current.get(selected);
+    if (mk && mapRef.current && !mapRef.current.getBounds().contains(mk.getLatLng())) mapRef.current.panTo(mk.getLatLng());
+  }, [selected, map.data]);
+
   return <div className="map">
-    <div className="map-grid"/><div className="land l1"/><div className="land l2"/><div className="land l3"/><div className="land l4"/><div className="land l5"/>
-    <svg className="routes" viewBox="0 0 1000 440" preserveAspectRatio="none">
-      {(map.data?.routes ?? []).filter(r => r.from.mapX != null && r.to.mapX != null).map(r => {
-        const [x1, y1] = pos(r.from), [x2, y2] = pos(r.to);
-        const mx = (x1 + x2) / 2, my = Math.min(y1, y2) - 60;
-        return <path key={r.id} className={r.kind === "route" ? "" : "teal-route"} d={`M${x1} ${y1} Q ${mx} ${my}, ${x2} ${y2}`}/>;
-      })}
-    </svg>
-    {nodes.map((n: MapNode) => <button key={n.id} title={n.name} className={`pin ${n.risk} ${selected === n.slug ? "selected" : ""}`} style={{ left: `${n.mapX}%`, top: `${n.mapY}%` }} onClick={() => setSelected(n.slug)}><span/></button>)}
+    <div className="lmap" ref={el}/>
+    {map.error && <div className="map-layer"><Badge tone="red">API unreachable</Badge></div>}
     <div className="map-info"><div className="info-top"><div className="map-pin-icon"><MapPin size={17}/></div><div><small>{e?.typeLabel ?? "Entity"}</small><b>{e?.name ?? "Loading…"}</b></div><Badge tone={riskTone(e?.risk)}>{e?.risk ?? "…"} risk</Badge></div><div className="info-stats"><span><small>MATERIALS</small><b>{e?.materialsLabel || "–"}</b></span><span><small>CONNECTIONS</small><b>{e?.connectionsLabel ?? "–"}</b></span><span><small>CONFIDENCE</small><b>{e?.confidence ?? "–"}</b></span></div><button onClick={() => setPage("Supply Chain Explorer")}>Inspect entity <ArrowUpRight size={13}/></button></div>
-    <div className="map-controls"><button><ZoomIn size={17}/></button><button><ZoomOut size={17}/></button><button onClick={() => setPage("Global Map")}><Route size={17}/></button></div>
-    <div className="legend"><span><i className="low"/>Low</span><span><i className="moderate"/>Moderate</span><span><i className="high"/>High risk</span></div>
+    <div className="map-controls"><button onClick={() => mapRef.current?.zoomIn()}><ZoomIn size={17}/></button><button onClick={() => mapRef.current?.zoomOut()}><ZoomOut size={17}/></button><button onClick={() => setPage(large ? "Chain Simulation" : "Global Map")} title={large ? "Open chain simulation" : "Open global map"}><Route size={17}/></button></div>
+    <div className="legend"><span><i className="low"/>Low</span><span><i className="moderate"/>Moderate</span><span><i className="high"/>High risk</span><span>◌ chokepoint</span></div>
   </div>;
+}
+
+function GlobalMapPage({ selected, setSelected, setPage }: { selected: string; setSelected: (s: string) => void; setPage: (p: Page) => void }) {
+  const [material, setMaterial] = useState("all");
+  const [data, setData] = useState<MapData | null>(null);
+  const a = data?.analytics;
+  const maxCountry = a ? Math.max(1, ...a.byCountry.map(c => c.count)) : 1;
+  const maxTransit = a ? Math.max(1, ...a.transits.map(t => t.transits)) : 1;
+  return <><PageTitle title="Geospatial intelligence workspace" sub="Facilities, ports, corridors and modeled material flows on a live map. Hover a node or route for detail, click a node to inspect it."/>
+    <div className="explorer-tools"><label className="field" style={{ marginTop: 0, minWidth: 240 }}><span className="select-wrap"><select value={material} onChange={ev => setMaterial(ev.target.value)}>{(data?.layers ?? [{ key: "all", label: "All materials" }]).map(l => <option key={l.key} value={l.key}>{l.label}</option>)}</select><ChevronDown size={15}/></span></label>{a && <Badge tone="teal">{a.totals.nodes} nodes · {a.totals.routes} routes · {a.totals.countries} countries</Badge>}<div/><button className="btn secondary" onClick={() => setPage("Chain Simulation")}><Route size={15}/>Play the GaN journey</button></div>
+    <div className="large-map"><WorldMap selected={selected} setSelected={setSelected} setPage={setPage} material={material} large onData={setData}/></div>
+    {a && <>
+      <div className="geo-tiles">
+        <article><small>NODES ON MAP</small><strong>{a.totals.nodes}</strong><p>across {a.totals.countries} countries</p></article>
+        <article><small>MODELED ROUTES</small><strong>{a.totals.routes}</strong><p>{a.totals.inferredLinks} inferred</p></article>
+        <article><small>HIGH-RISK NODES</small><strong className="red">{a.totals.highRisk}</strong><p>of {a.totals.nodes} · avg dependency {a.totals.avgDependency}</p></article>
+        <article><small>CHOKEPOINTS</small><strong className={a.totals.chokepointsElevated ? "amber" : ""}>{a.totals.chokepointsElevated} / {a.totals.chokepoints}</strong><p>elevated right now</p></article>
+        <article><small>TRANSITS, 7 DAYS</small><strong>{a.transits.reduce((s, t) => s + t.transits, 0)}</strong><p>{a.transits.reduce((s, t) => s + t.alerts, 0)} alerts raised</p></article>
+        <article><small>LAYER</small><strong style={{ fontSize: 15 }}>{data?.layers.find(l => l.key === material)?.label ?? "All materials"}</strong><p>{a.byType.map(t => `${t.count} ${t.label.toLowerCase()}`).slice(0, 3).join(" · ")}</p></article>
+      </div>
+      <div className="geo-grid">
+        <section className="panel"><h3>Nodes by country</h3><p className="muted">Red share = high-risk nodes</p>
+          <div className="bars">{a.byCountry.map(c => <div key={c.code}><span>{c.name}<small>avg dependency {c.avgScore}</small></span><div className="track"><i className="hi" style={{ width: `${(c.highRisk / maxCountry) * 100}%` }}/><i className="rest" style={{ width: `${((c.count - c.highRisk) / maxCountry) * 100}%` }}/></div><span className="n">{c.count}</span></div>)}</div>
+          <h3 style={{ marginTop: 18 }}>Monitored transits, last 7 days</h3><p className="muted">Illustrative</p>
+          <div className="transits">{a.transits.map(t => <div key={t.date} title={`${t.transits} transits · ${t.alerts} alerts`}><i style={{ height: `${(t.transits / maxTransit) * 70}%` }}/>{t.alerts > 0 && <i className="a" style={{ height: `${t.alerts * 4}%`, width: "40%" }}/>}<small>{t.label}</small></div>)}</div>
+        </section>
+        <section className="panel"><h3>Monitored corridors</h3><p className="muted">Share of flow, transit time, incidents and delay in the last 30 days</p>
+          <div className="corr">
+            <div className="head"><span>CORRIDOR</span><span>STATUS</span><span className="r">SHARE</span><span className="r">TRANSIT</span><span className="r">INCIDENTS</span></div>
+            {a.corridors.map(c => <div key={c.id}><span><b>{c.corridor}</b><small>{c.from} → {c.to}</small></span><Badge tone={c.status === "elevated" ? "red" : c.status === "watch" ? "amber" : "teal"}>{c.status}</Badge><span className="r">{c.volumeSharePct}%</span><span className="r">{c.transitDays} d<br/><small>+{c.delayPct}% delay</small></span><span className="r">{c.incidents30d}</span></div>)}
+          </div>
+        </section>
+        <section className="panel"><h3>Top exposures</h3><p className="muted">Highest dependency scores on this layer</p>
+          <ol className="topx">{a.topExposure.map((x, i) => <li key={x.slug} onClick={() => setSelected(x.slug)}><span className="k">{i + 1}</span><span><b>{x.name}</b><small>{x.typeLabel}{x.country ? ` · ${x.country}` : ""}</small><div className="track"><i style={{ width: `${x.score}%`, background: RISK_HEX[x.risk] }}/></div></span><span className="s">{x.score}</span></li>)}</ol>
+          <p className="geo-note">{a.note}</p>
+        </section>
+      </div>
+    </>}
+  </>;
 }
 
 /* ---------- Workspaces ---------- */
@@ -711,7 +791,7 @@ function JourneyMap({ journey, onInspect }: { journey: Journey; onInspect: (slug
 }
 
 function GenericPage({ page, setPage, selected, setSelected }: { page: Page; setPage: (p: Page) => void; selected: string; setSelected: (s: string) => void }) {
-  if (page === "Global Map") return <><PageTitle title="Geospatial intelligence workspace" sub="Explore facilities, ports, corridors, and modeled material flows."/><div className="large-map"><WorldMap selected={selected} setSelected={setSelected} setPage={setPage}/></div></>;
+  if (page === "Global Map") return <GlobalMapPage selected={selected} setSelected={setSelected} setPage={setPage}/>;
   if (page === "Dependency Analysis") return <DependencyPage setPage={setPage} setSelected={setSelected}/>;
   if (page === "Alternative Sources") return <AlternativesPage/>;
   return <ReportsPage/>;

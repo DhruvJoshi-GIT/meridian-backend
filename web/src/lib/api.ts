@@ -42,6 +42,18 @@ export interface SimulationResult { shortfallPct: number; shortfallFromDay: numb
 export interface TariffResult { currentLandedCost: number; scenarioLandedCost: number; delta: number; deltaPct: number; curve: { dutyPct: number; landedCost: number }[]; maxDutyPct: number; disclaimer: string }
 export interface Report { id: string; title: string; type: string; rating: string | null; score: number | null; summary: string | null; format: string; createdAt: string; rank?: number; subtitle?: string; content?: { heading: string; body: string; bullets?: string[] }[] }
 
+export interface MapNodeFull extends MapNode { type: string; region: string | null; country: string | null; dependencyScore: number; isChokepoint: boolean; chokepointStatus: string | null; confidence: string; evidenceStatus: string }
+export interface MapRoute { id: string; fromId: string; toId: string; kind: string; corridor: string | null; risk: Risk; volumeShare: number; material: string | null; from: { id: string; slug: string; name: string; lat: number | null; lng: number | null }; to: { id: string; slug: string; name: string; lat: number | null; lng: number | null } }
+export interface MapAnalytics {
+  totals: { nodes: number; routes: number; countries: number; chokepoints: number; chokepointsElevated: number; highRisk: number; inferredLinks: number; avgDependency: number };
+  byRisk: { risk: Risk; count: number }[]; byType: { label: string; count: number }[];
+  byCountry: { code: string; name: string; count: number; highRisk: number; avgScore: number }[];
+  corridors: { id: string; corridor: string; from: string; to: string; risk: Risk; kind: string; material: string | null; volumeSharePct: number; transitDays: number; incidents30d: number; delayPct: number; status: string }[];
+  topExposure: { slug: string; name: string; typeLabel: string; risk: Risk; country: string | null; score: number }[];
+  transits: { date: string; label: string; transits: number; alerts: number }[]; note: string;
+}
+export interface MapData { material: string; nodes: MapNodeFull[]; routes: MapRoute[]; layers: { key: string; label: string }[]; legend: { key: string; label: string }[]; analytics: MapAnalytics }
+
 // ---- Endpoints ----
 export const api = {
   login: (email: string, password: string) => request<{ token: string; user: { id: string; name: string; title: string; initials: string } }>("/auth/login", { method: "POST", json: { email, password } }),
@@ -58,7 +70,7 @@ export const api = {
   materials: () => request<{ materials: { id: string; slug: string; name: string; symbol: string | null; category: string; criticality: string; connectedEntities: number }[] }>("/materials"),
   entities: (params: { type?: string; risk?: Risk; material?: string } = {}) => request<{ entities: Entity[] }>(`/entities?${new URLSearchParams(params as Record<string, string>)}`),
   entity: (idOrSlug: string) => request<{ entity: Entity }>(`/entities/${idOrSlug}`),
-  map: (material?: string) => request<{ nodes: (MapNode & { isChokepoint: boolean; chokepointStatus: string | null; confidence: string })[]; routes: { id: string; fromId: string; toId: string; kind: string; corridor: string | null; risk: Risk; from: { mapX: number | null; mapY: number | null }; to: { mapX: number | null; mapY: number | null } }[]; layers: { key: string; label: string }[] }>(`/map${material ? `?material=${material}` : ""}`),
+  map: (material?: string) => request<MapData>(`/map${material && material !== "all" ? `?material=${material}` : ""}`),
   supplyChains: (material?: string) => request<{ chains: SupplyChain[] }>(`/supply-chains${material ? `?material=${material}` : ""}`),
 
   dependency: (material = "gallium-nitride") => request<{ headline: string; assessment: { title: string; hhi: number; concentration: string; updatedAt: string; items: ({ rank: number; score: number; rating: string; note: string | null } & MapNode)[] } | null; live: { hhi: number; concentration: string; topTwoSharePct: number; suppliers: { id: string; name: string; sharePct: number }[] } }>(`/dependency?material=${material}`),
