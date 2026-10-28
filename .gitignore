@@ -3,3 +3,6 @@ dist
 .env
 prisma/*.db-journal
 .vercel
+
+.vercel
+.env*
