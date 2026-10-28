@@ -57,7 +57,7 @@ entitiesRouter.get("/:id", async (req, res) => {
     entity: {
       ...e,
       materials: e.materials.map((m) => ({ ...m.material, role: m.role })),
-      materialsLabel: e.materials.map((m) => m.material.symbol ?? m.material.name).join(" - "),
+      materialsLabel: e.materials.map((m) => m.material.symbol ?? m.material.name).join(" · "),
       connections: e.outgoing.length + e.incoming.length,
       connectionsLabel: `${e.outgoing.length + e.incoming.length} nodes`,
       dependencyScoreLabel: `${e.dependencyScore} / 100`,

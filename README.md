@@ -1,8 +1,10 @@
-# Meridian Supply Chain Intelligence · Backend
+# Meridian Supply Chain Intelligence
 
-REST API behind the Meridian analyst workspace: trace critical materials from origin to end use, score supplier concentration, simulate disruptions, model tariff impact, and generate decision briefs.
+Full-stack analyst workspace: a React frontend (exported from Figma Make) in `web/`, and the REST API that powers it at the root. The site and the API deploy together as one Vercel project.
 
-**Live API:** https://meridian-backend-cyan.vercel.app · **Health:** https://meridian-backend-cyan.vercel.app/api/health · **One-call overview:** https://meridian-backend-cyan.vercel.app/api/overview
+The API lets you trace critical materials from origin to end use, score supplier concentration, simulate disruptions, model tariff impact, and generate decision briefs.
+
+**Live site:** https://meridian-backend-cyan.vercel.app · **API root:** https://meridian-backend-cyan.vercel.app/api/health · **Health:** https://meridian-backend-cyan.vercel.app/api/health · **One-call overview:** https://meridian-backend-cyan.vercel.app/api/overview
 
 Built from a Figma Make frontend ([Build Meridian Supply Chain Intelligence](https://www.figma.com/make/r5qDau9VcXwLoOlmXBcdKY/Build-Meridian-Supply-Chain-Intelligence)): every number the UI shows has an endpoint here, and the Simulator, Tariff and Reports pages run on real calculations instead of hardcoded values.
 
@@ -12,7 +14,8 @@ Built from a Figma Make frontend ([Build Meridian Supply Chain Intelligence](htt
 
 | Layer | Choice | Why |
 | --- | --- | --- |
-| Runtime | **Node.js 22+**, **TypeScript 5** | One language with the frontend, strict types end to end |
+| Frontend | **React 19**, **Vite 8**, **Tailwind CSS 4**, lucide-react | The Figma Make export, wired to the API through `web/src/lib/api.ts` |
+| Runtime | **Node.js 22+**, **TypeScript 5** | One language front to back, strict types end to end |
 | HTTP | **Express 5** | Async handlers with native error propagation, tiny surface |
 | ORM | **Prisma 6** | Schema as source of truth, typed queries, one-line database swap |
 | Database | **SQLite** (dev + demo) / **PostgreSQL** (production) | Zero setup locally; change `provider` and `DATABASE_URL` to move |
@@ -20,7 +23,7 @@ Built from a Figma Make frontend ([Build Meridian Supply Chain Intelligence](htt
 | Auth | **JSON Web Tokens** + **bcryptjs** | Stateless sessions; demo-analyst fallback while the UI has no login |
 | Hardening | **helmet**, **cors**, **morgan** | Security headers, origin allow-list, request logs |
 | Dev loop | **tsx** | Run TypeScript directly, with watch mode |
-| Hosting | **Vercel** serverless | `api/index.ts` wraps the Express app; `vercel.json` rewrites every path to it |
+| Hosting | **Vercel** | Static `web/` build served from `public/`; `api/index.ts` wraps the Express app behind `/api/*` |
 
 <p align="center"><img src="docs/venn-stack.svg" width="640" alt="Venn diagram: Express, Prisma and Zod overlapping, with Meridian API at the centre"></p>
 
@@ -31,11 +34,12 @@ Built from a Figma Make frontend ([Build Meridian Supply Chain Intelligence](htt
 ```mermaid
 flowchart LR
     subgraph Client
-        UI["Meridian frontend<br/>(React 19 + Vite)"]
+        UI["web/ frontend<br/>React 19 + Vite, built to public/"]
     end
 
     subgraph Vercel["Vercel (serverless)"]
-        RW["vercel.json rewrite<br/>/(.*) -> /api"]
+        ST["Static files<br/>public/index.html"]
+        RW["vercel.json rewrite<br/>/api/(.*) -> /api"]
         FN["api/index.ts<br/>copies prisma/dev.db -> /tmp on cold start"]
     end
 
@@ -61,6 +65,7 @@ flowchart LR
         DB[("SQLite dev.db<br/>or PostgreSQL")]
     end
 
+    ST --> UI
     UI -- "fetch /api/*" --> RW --> FN --> MW --> AUTH --> R1 & R2 & R3 & R4
     R3 --> DEP
     R4 --> SIM & TAR & REP
@@ -176,7 +181,8 @@ stateDiagram-v2
 flowchart TD
     A["git push -> GitHub<br/>DhruvJoshi-GIT/meridian-backend"] --> B["Vercel build"]
     B --> C["npm install<br/>postinstall: prisma generate<br/>(native + rhel-openssl-3.0.x engines)"]
-    C --> D["Bundle api/index.ts<br/>includeFiles: prisma/** + .prisma/client/**"]
+    C --> C2["npm --prefix web ci && vite build<br/>-> public/"]
+    C2 --> D["Bundle api/index.ts<br/>includeFiles: prisma/** + .prisma/client/**"]
     D --> E["Serverless function<br/>cold start: copy dev.db -> /tmp/meridian.db"]
     E --> F["https://meridian-backend-cyan.vercel.app"]
     F -. "durable data?" .-> G["Set DATABASE_URL to Postgres<br/>provider = postgresql · prisma db push · db:seed"]
@@ -193,7 +199,11 @@ git clone https://github.com/DhruvJoshi-GIT/meridian-backend.git
 cd meridian-backend
 cp .env.example .env
 npm run setup     # install, generate Prisma client, create dev.db, seed demo data
-npm run dev       # http://localhost:4000
+npm run dev       # API on http://localhost:4000
+
+# in a second terminal: the frontend (proxies /api to port 4000)
+npm run web:install
+npm run web:dev   # http://localhost:8443
 ```
 
 Demo login: `alex.morgan@meridian.local` / `meridian123`
@@ -293,6 +303,9 @@ Model: `shortfall = reduction × entity supply share × scenario severity`; onse
 ## Project layout
 
 ```
+web/                   React frontend (Figma Make export) -> builds to public/
+web/src/App.tsx        every screen, wired to the API
+web/src/lib/api.ts     typed client for every endpoint
 api/index.ts           Vercel serverless entry (copies the SQLite file to /tmp, exports the app)
 prisma/schema.prisma   data model (14 tables)
 prisma/seed.ts         demo data matching the Figma design

@@ -1,0 +1,10 @@
+{
+  "description": "Helps government and supply-chain analysts trace material dependencies, assess geopolitical risks, simulate disruptions, and compare strategies with evidence-aware intelligence.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

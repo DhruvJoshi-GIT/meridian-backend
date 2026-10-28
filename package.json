@@ -15,7 +15,10 @@
     "setup": "npm install && prisma generate && prisma db push && tsx prisma/seed.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "postinstall": "prisma generate",
-    "vercel-build": "prisma generate"
+    "vercel-build": "prisma generate",
+    "web:dev": "npm --prefix web run dev",
+    "web:build": "npm --prefix web run build",
+    "web:install": "npm --prefix web install"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

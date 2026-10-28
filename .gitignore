@@ -6,3 +6,6 @@ prisma/*.db-journal
 
 .vercel
 .env*
+public/
+web/node_modules
+web/dist

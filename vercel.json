@@ -8,11 +8,11 @@
   },
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/api/(.*)",
       "destination": "/api"
     }
   ],
-  "buildCommand": "prisma generate",
+  "buildCommand": "prisma generate && npm --prefix web ci && npm --prefix web run build",
   "outputDirectory": "public",
   "installCommand": "npm ci"
 }

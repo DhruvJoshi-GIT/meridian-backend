@@ -45,7 +45,7 @@ async function main() {
   // ---------- Materials ----------
   const materialsData = [
     { slug: "gallium", name: "Gallium", symbol: "Ga", category: "Critical material", criticality: "high", description: "By-product of bauxite/alumina refining; essential for compound semiconductors." },
-    { slug: "gallium-6n", name: "6N Gallium", symbol: "Ga 99.9999%", category: "Refined material", criticality: "high" },
+    { slug: "gallium-6n", name: "6N Gallium", symbol: "6N Ga", category: "Refined material", criticality: "high" },
     { slug: "gallium-nitride", name: "Gallium Nitride (GaN)", symbol: "GaN", category: "Compound semiconductor", criticality: "high", description: "Wide-bandgap semiconductor used in radar, RF and power electronics." },
     { slug: "bauxite", name: "Bauxite", symbol: "Al(OH)3", category: "Raw material", criticality: "low" },
     { slug: "germanium", name: "Germanium", symbol: "Ge", category: "Critical material", criticality: "high" },
