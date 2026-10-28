@@ -295,7 +295,7 @@ Model: `shortfall = reduction × entity supply share × scenario severity`; onse
 ### Chain Simulation
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/api/journey?material=gallium-nitride` | Ordered mine-to-end-use journey with real coordinates: each step has a stage, mode (site / sea / air / road), duration, and a lat/lng path including sea-route waypoints. The frontend animates it on a Leaflet map with keyless Esri / OpenStreetMap tiles. |
+| GET | `/api/journey?material=gallium-nitride` | Ordered mine-to-end-use journey with real coordinates: each step has a stage, mode (site / sea / air / road), duration, cost, cargo, carrier, day range, cumulative cost, full entity dossiers for both ends, and a lat/lng path including sea-route waypoints. Totals: days, cost, countries. |
 
 ### Reports
 | Method | Path | Notes |

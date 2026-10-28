@@ -85,9 +85,9 @@ export interface TariffSimulation {
   lanes: SimLane[]; byDestination: { code: string; name: string; lanes: number; currentDutyPct: number; currentLanded: number; simulatedLanded: number; deltaPct: number; volumeDeltaPct: number }[];
   curve: { dutyPct: number; indexPct: number }[]; maxDutyPct: number; disclaimer: string;
 }
-export interface JourneyPlace { id: string; slug: string; name: string; typeLabel: string; region: string | null; country: string | null; risk: Risk; lat: number | null; lng: number | null; isChokepoint: boolean }
-export interface JourneyStep { order: number; stage: string; title: string; description: string; mode: "site" | "sea" | "air" | "road" | "rail"; durationDays: number; from: JourneyPlace | null; to: JourneyPlace | null; path: [number, number][] }
-export interface Journey { material: { slug: string; name: string }; steps: JourneyStep[]; totalDays: number; countries: string[]; bounds: { south: number; north: number; west: number; east: number } | null; attribution: string }
+export interface JourneyPlace { id: string; slug: string; name: string; type: string; typeLabel: string; description: string | null; region: string | null; country: string | null; countryName: string | null; risk: Risk; dependencyScore: number; confidence: string; evidenceStatus: string; evidenceNote: string | null; isChokepoint: boolean; chokepointStatus: string | null; lat: number | null; lng: number | null; materials: { slug: string; name: string; symbol: string | null; role: string | null }[]; connections: number }
+export interface JourneyStep { order: number; stage: string; title: string; description: string; mode: "site" | "sea" | "air" | "road" | "rail"; durationDays: number; costUsd: number; cargo: string | null; carrier: string | null; dayStart: number; dayEnd: number; cumulativeCostUsd: number; from: JourneyPlace | null; to: JourneyPlace | null; path: [number, number][] }
+export interface Journey { material: { slug: string; name: string }; steps: JourneyStep[]; totalDays: number; totalCostUsd: number; countries: { code: string; name: string }[]; bounds: { south: number; north: number; west: number; east: number } | null; attribution: string }
 
 export const tariffSim = {
   lanes: (material: string) => request<{ material: { slug: string; name: string }; lanes: TradeLane[]; referenceDutyPct: number; destinations: { code: string; name: string; currentDutyPct: number }[]; hsCodes: string[]; materials: { slug: string; name: string }[] }>("/tariffs/lanes?material=" + encodeURIComponent(material)),

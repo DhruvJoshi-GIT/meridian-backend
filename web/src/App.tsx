@@ -392,11 +392,58 @@ const BASEMAPS: Record<string, { label: string; url: string; attr: string; maxZo
 function ChainSimulation({ setPage, setSelected }: { setPage: (p: Page) => void; setSelected: (s: string) => void }) {
   const data = useApi(() => fetchJourney(MATERIAL));
   const j = data.data;
-  return <><PageTitle title="Chain Simulation" sub={j ? `${j.material.name}: from ore to antenna across ${j.countries.length} countries in about ${j.totalDays} days.` : "From mine to end use, on the real map."} action={j?.material.name ?? "Gallium Nitride (GaN)"}/>
+  return <><PageTitle title="Chain Simulation" sub={j ? `${j.material.name}: from Australian ore to an Indian radar array across ${j.countries.length} countries, about ${j.totalDays} days and $${j.totalCostUsd.toLocaleString()} per wafer lot. Click any dot for full detail.` : "From mine to end use, on the real map."} action={j?.material.name ?? "Gallium Nitride (GaN)"}/>
     <ApiError message={data.error}/>
     {j ? <JourneyMap journey={j} onInspect={(slug) => { setSelected(slug); setPage("Supply Chain Explorer"); }}/> : <Busy text="Loading journey…"/>}
     <p className="journey-attr">{j?.attribution ?? ""}</p>
   </>;
+}
+
+const escapeHtml = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
+const usd = (n: number) => `$${Math.round(n).toLocaleString()}`;
+const roleOf = (p: Journey["steps"][number]["from"]) => !p ? "" : p.type === "LOGISTICS" ? (p.isChokepoint ? "Port / maritime chokepoint" : "Port / logistics node") : p.type === "RAW_MATERIAL" ? "Mine / raw-material source" : p.type === "PROCESSING" ? "Processor / refiner (supplier)" : p.type === "MANUFACTURER" ? "Manufacturer / assembly plant (supplier)" : p.type === "SUPPLIER" ? "Supplier" : p.type === "END_USE" ? "End-use programme" : p.typeLabel;
+
+/** Everything about one dot: the place itself, and what the journey does there (arrive, dwell, depart, time, cost). */
+function placePopup(p: NonNullable<Journey["steps"][number]["from"]>, steps: Journey["steps"]) {
+  const h = escapeHtml;
+  const inbound = steps.filter(s => s.to?.slug === p.slug);
+  const onSite = steps.filter(s => s.from?.slug === p.slug && !s.to);
+  const outbound = steps.filter(s => s.from?.slug === p.slug && s.to);
+  const touching = [...inbound, ...onSite, ...outbound].sort((a, b) => a.order - b.order);
+  const arrive = inbound[0]?.dayEnd ?? onSite[0]?.dayStart ?? outbound[0]?.dayStart ?? 0;
+  const depart = outbound[0]?.dayStart ?? onSite[onSite.length - 1]?.dayEnd ?? arrive;
+  const dwell = Math.max(0, depart - arrive);
+  const costHere = onSite.reduce((a, s) => a + s.costUsd, 0);
+  const costSoFar = touching.length ? touching[touching.length - 1].cumulativeCostUsd : 0;
+  const stageColor = STAGE_COLOR[onSite[0]?.stage ?? "LOGISTICS"] ?? "#14b8a6";
+  const row = (k: string, v: string) => `<div class="jp-row"><dt>${k}</dt><dd>${v}</dd></div>`;
+  const legs = touching.map(s => {
+    const kind = s.to ? (s.from?.slug === p.slug ? "Departs" : "Arrives") : "On site";
+    const via = s.to ? `${h(s.mode)}${s.carrier ? ` · ${h(s.carrier)}` : ""}` : h(s.carrier ?? s.stage);
+    const where = s.to ? (s.from?.slug === p.slug ? `to ${h(s.to.name)}${s.to.countryName ? `, ${h(s.to.countryName)}` : ""}` : `from ${h(s.from?.name)}${s.from?.countryName ? `, ${h(s.from.countryName)}` : ""}`) : h(s.title);
+    return `<li><b>${kind}</b> ${where}<br><small>${via} · ${s.durationDays ? `${s.durationDays} day${s.durationDays > 1 ? "s" : ""} (day ${s.dayStart}–${s.dayEnd})` : "same day"} · ${usd(s.costUsd)}${s.cargo ? `<br>${h(s.cargo)}` : ""}</small></li>`;
+  }).join("");
+  return `<div class="jp">
+    <div class="jp-head"><span class="jp-dot" style="background:${stageColor}"></span><div><small>${h(roleOf(p))}</small><b>${h(p.name)}</b><span>${h(p.region ?? "")}</span></div><em class="badge ${p.risk === "high" ? "red" : p.risk === "medium" ? "amber" : "teal"}">${h(p.risk)} risk</em></div>
+    ${p.description ? `<p class="jp-desc">${h(p.description)}</p>` : ""}
+    <dl class="jp-grid">
+      ${row("Country", h(p.countryName ?? p.country ?? "–"))}
+      ${row("Role", h(roleOf(p)))}
+      ${row("Arrives", `day ${arrive}`)}
+      ${row("Departs", outbound.length ? `day ${depart}` : "final stop")}
+      ${row("Time here", dwell ? `${dwell} day${dwell > 1 ? "s" : ""}` : outbound.length ? "pass-through" : "final destination")}
+      ${row("Cost here", costHere ? usd(costHere) : "–")}
+      ${row("Cost so far", usd(costSoFar))}
+      ${row("Dependency", `${p.dependencyScore} / 100`)}
+      ${row("Evidence", `${h(p.evidenceStatus)} · ${h(p.confidence)} confidence`)}
+      ${row("Materials", h(p.materials.map(m => `${m.symbol ?? m.name}${m.role ? ` (${m.role})` : ""}`).join(", ") || "–"))}
+      ${row("Links", `${p.connections} connected nodes${p.isChokepoint ? ` · chokepoint${p.chokepointStatus ? ` (${h(p.chokepointStatus)})` : ""}` : ""}`)}
+      ${row("Position", `${p.lat?.toFixed(2)}, ${p.lng?.toFixed(2)}`)}
+    </dl>
+    <ul class="jp-legs">${legs}</ul>
+    ${p.evidenceNote ? `<p class="jp-note">${h(p.evidenceNote)}</p>` : ""}
+    <button type="button" class="btn primary wide" data-inspect="${h(p.slug)}">Inspect entity in Explorer</button>
+  </div>`;
 }
 
 function JourneyMap({ journey, onInspect }: { journey: Journey; onInspect: (slug: string) => void }) {
@@ -435,8 +482,9 @@ function JourneyMap({ journey, onInspect }: { journey: Journey; onInspect: (slug
     const pins = [...places.values()].filter((p): p is NonNullable<typeof p> => !!p && p.lat != null && p.lng != null).map(p => {
       const stage = steps.find(s => s.from?.slug === p.slug && s.mode === "site")?.stage ?? "LOGISTICS";
       const m = L.marker([p.lat!, p.lng!], { icon: L.divIcon({ className: "", html: `<div class="jm-pin" style="color:${STAGE_COLOR[stage] ?? "#14b8a6"}"></div>`, iconSize: [14, 14], iconAnchor: [7, 7] }) }).addTo(map);
-      m.bindTooltip(`<b>${p.name}</b><br>${p.region ?? ""}${p.isChokepoint ? " · chokepoint" : ""}`, { direction: "top", offset: [0, -10], className: "jm-label", opacity: 1 });
-      m.on("click", () => onInspect(p.slug));
+      m.bindTooltip(`<b>${p.name}</b><br>${p.region ?? ""}${p.isChokepoint ? " · chokepoint" : ""}<br><span style="opacity:.7">Click for full detail</span>`, { direction: "top", offset: [0, -10], className: "jm-label", opacity: 1 });
+      m.bindPopup(() => placePopup(p, steps), { className: "jm-popup", maxWidth: 360, minWidth: 300, autoPanPadding: [24, 24] });
+      m.on("popupopen", (ev) => { const btn = ev.popup.getElement()?.querySelector<HTMLButtonElement>("button[data-inspect]"); if (btn) btn.onclick = () => onInspect(p.slug); });
       return m;
     });
     const trail = L.polyline([], { color: "#3b82f6", weight: 3.5, opacity: 0.95 }).addTo(map);
@@ -505,7 +553,15 @@ function JourneyMap({ journey, onInspect }: { journey: Journey; onInspect: (slug
   return <div className="journey">
     <div className="journey-map" ref={mapEl}/>
     <aside className="journey-side">
-      <div className="journey-now"><small>STEP {step + 1} OF {steps.length} · {s?.stage.replace("_", " ")} · DAY {dayAt}</small><h3>{s?.title}</h3><p>{s?.description}</p></div>
+      <div className="journey-now"><small>STEP {step + 1} OF {steps.length} · {s?.stage.replace("_", " ")} · DAY {dayAt} OF {journey.totalDays}</small><h3>{s?.title}</h3><p>{s?.description}</p>
+        {s && <dl className="journey-facts">
+          <div><dt>Where</dt><dd>{s.from?.name}{s.from?.countryName ? `, ${s.from.countryName}` : ""}{s.to ? ` → ${s.to.name}${s.to.countryName ? `, ${s.to.countryName}` : ""}` : ""}</dd></div>
+          <div><dt>Time</dt><dd>{s.durationDays ? `${s.durationDays} day${s.durationDays > 1 ? "s" : ""} (day ${s.dayStart} → ${s.dayEnd})` : "Same day"}</dd></div>
+          <div><dt>Cost</dt><dd>${s.costUsd.toLocaleString()} this step · ${s.cumulativeCostUsd.toLocaleString()} so far of ${journey.totalCostUsd.toLocaleString()}</dd></div>
+          {s.cargo && <div><dt>Cargo</dt><dd>{s.cargo}</dd></div>}
+          {s.carrier && <div><dt>Via</dt><dd>{s.carrier}</dd></div>}
+        </dl>}
+      </div>
       <div className="journey-controls">
         <button className="btn primary" onClick={() => setPlaying(p => !p)}>{playing ? <Pause size={15}/> : <Play size={15}/>}{playing ? "Pause" : "Play"}</button>
         <button className="btn secondary" onClick={() => jump(Math.min(steps.length - 1, step + 1))}><SkipForward size={15}/></button>

@@ -98,3 +98,29 @@ main{margin-left:240px;width:calc(100% - 240px);transition:.25s}.collapsed+main{
 .jm-label{background:#101c2beb;color:#fff;border:1px solid #ffffff2a;border-radius:6px;padding:3px 7px;font-size:10px;white-space:nowrap}
 .journey-attr{font-size:10px;color:var(--muted);margin-top:8px}
 @media(max-width:1100px){.journey{grid-template-columns:1fr}.journey-side{border-left:0;border-top:1px solid var(--border)}.sim-controls{grid-template-columns:1fr 1fr}.sim-tiles{grid-template-columns:1fr 1fr}.lane-table>div{grid-template-columns:1.4fr 1fr 1fr 1fr}.lane-table>div>:nth-child(5),.lane-table>div>:nth-child(6){display:none}}
+
+/* ---- Chain simulation: step facts + dot popups ---- */
+.journey-facts{margin:12px 0 0;display:grid;gap:5px}
+.journey-facts div{display:grid;grid-template-columns:48px 1fr;gap:8px;font-size:11px}
+.journey-facts dt{color:#78879a;font-weight:600;letter-spacing:.4px;font-size:9px;text-transform:uppercase;padding-top:2px}
+.journey-facts dd{margin:0;color:#35465a}
+.jm-popup .leaflet-popup-content-wrapper{background:#101c2bf2;color:#e6edf5;border:1px solid #ffffff22;border-radius:10px;box-shadow:0 20px 50px #0008;backdrop-filter:blur(8px)}
+.jm-popup .leaflet-popup-tip{background:#101c2bf2}
+.jm-popup .leaflet-popup-content{margin:14px 16px;font:12px/1.45 Inter,system-ui,sans-serif;max-height:420px;overflow:auto}
+.jm-popup .leaflet-popup-close-button{color:#9fb0c4}
+.jp-head{display:grid;grid-template-columns:12px 1fr auto;gap:10px;align-items:start}
+.jp-dot{width:12px;height:12px;border-radius:50%;margin-top:4px;box-shadow:0 0 10px currentColor}
+.jp-head small{display:block;font-size:9px;letter-spacing:.6px;text-transform:uppercase;color:#9fb0c4}
+.jp-head b{display:block;font-size:14px;color:#fff}
+.jp-head span{font-size:11px;color:#9fb0c4}
+.jp-head .badge{margin-top:2px}
+.jp-desc{margin:10px 0 0;color:#c7d2de;font-size:11px}
+.jp-grid{margin:12px 0 0;display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;border-top:1px solid #ffffff18;padding-top:10px}
+.jp-row dt{font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:#9fb0c4}
+.jp-row dd{margin:0;color:#fff;font-weight:500}
+.jp-legs{list-style:none;margin:12px 0 0;padding:10px 0 0;border-top:1px solid #ffffff18;display:grid;gap:8px}
+.jp-legs li{padding-left:10px;border-left:2px solid #3b82f6}
+.jp-legs b{color:#fff}
+.jp-legs small{color:#9fb0c4;font-size:10px}
+.jp-note{margin:10px 0 0;font-size:10px;color:#9fb0c4;font-style:italic}
+.jp .btn{margin-top:12px;font-size:12px;padding:9px 12px}

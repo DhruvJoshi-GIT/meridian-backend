@@ -309,6 +309,9 @@ model JourneyStep {
   description  String
   mode         String // site | sea | air | road | rail
   durationDays Int     @default(0)
+  costUsd      Float? // cost of this step per shipment lot, USD (illustrative)
+  cargo        String? // what is moving / being processed
+  carrier      String? // vessel type, airline cargo, truck, plant line
   fromEntityId String?
   toEntityId   String?
   waypoints    String? // JSON [[lat,lng],...] between from and to (sea routes around coasts)

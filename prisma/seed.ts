@@ -79,6 +79,9 @@ async function main() {
     { slug: "aegis-radar-programme", name: "Aegis Radar Programme", type: "END_USE", typeLabel: "End use", region: "Portsmouth, United Kingdom", country: "GB", lat: 50.8, lng: -1.09, mapX: 86, mapY: 54, risk: "medium", dependencyScore: 61, confidence: "High", evidenceStatus: "Documented", description: "Defence electronics" },
     { slug: "ew-suite-programme", name: "Electronic Warfare Suite", type: "END_USE", typeLabel: "End use", region: "United Kingdom", country: "GB", lat: 52.2, lng: -1.5, mapX: 88, mapY: 62, risk: "medium", dependencyScore: 58, confidence: "Moderate", evidenceStatus: "Documented" },
     { slug: "grid-power-electronics", name: "Grid Power Electronics Programme", type: "END_USE", typeLabel: "End use", region: "Germany", country: "DE", lat: 48.1, lng: 11.6, mapX: 82, mapY: 44, risk: "low", dependencyScore: 39, confidence: "Moderate", evidenceStatus: "Inferred" },
+    { slug: "chennai-port", name: "Chennai Port", type: "LOGISTICS", typeLabel: "Logistics", region: "Chennai, Tamil Nadu, India", country: "IN", lat: 13.08, lng: 80.29, mapX: 44, mapY: 50, risk: "low", dependencyScore: 38, confidence: "High", evidenceStatus: "Documented", isChokepoint: false, description: "Container gateway on the Bay of Bengal for electronics imports into south India" },
+    { slug: "bengaluru-rf-plant", name: "Bengaluru RF Modules Plant", type: "MANUFACTURER", typeLabel: "Assembly", region: "Bengaluru, Karnataka, India", country: "IN", lat: 12.97, lng: 77.59, mapX: 41, mapY: 46, risk: "medium", dependencyScore: 57, confidence: "Moderate", evidenceStatus: "Documented", description: "GaN dies packaged into transmit/receive modules for radar arrays (illustrative plant in the Bengaluru defence-electronics cluster)" },
+    { slug: "india-aesa-radar", name: "Indian AESA Radar Programme", type: "END_USE", typeLabel: "End use", region: "Hyderabad, Telangana, India", country: "IN", lat: 17.38, lng: 78.48, mapX: 42, mapY: 40, risk: "medium", dependencyScore: 63, confidence: "High", evidenceStatus: "Documented", description: "Active electronically scanned array radar integration (illustrative programme)" },
     { slug: "ge-refinery-east", name: "Eastern Germanium Refinery", type: "PROCESSING", typeLabel: "Processing", region: "East Asia (illustrative)", country: "CN", lat: 25.0, lng: 102.7, mapX: 24, mapY: 56, risk: "high", dependencyScore: 77, confidence: "Low", evidenceStatus: "Estimated" },
     { slug: "ree-separation-plant", name: "REE Separation Plant", type: "PROCESSING", typeLabel: "Processing", region: "East Asia (illustrative)", country: "CN", lat: 41.1, lng: 113.0, mapX: 30, mapY: 30, risk: "high", dependencyScore: 85, confidence: "Moderate", evidenceStatus: "Documented" },
     { slug: "sic-wafer-fab", name: "Pacific SiC Wafer Fab", type: "MANUFACTURER", typeLabel: "Manufacturer", region: "Taiwan", country: "TW", lat: 24.8, lng: 121.0, mapX: 40, mapY: 42, risk: "medium", dependencyScore: 52, confidence: "High", evidenceStatus: "Documented" },
@@ -112,6 +115,9 @@ async function main() {
     ["secondary-recovery-hub", "gallium", "produces"],
     ["secondary-recovery-hub", "gallium-nitride", "processes"],
     ["aegis-radar-programme", "gallium-nitride", "consumes"],
+    ["chennai-port", "gallium-nitride", "transits"],
+    ["bengaluru-rf-plant", "gallium-nitride", "consumes"],
+    ["india-aesa-radar", "gallium-nitride", "consumes"],
     ["ew-suite-programme", "gallium-nitride", "consumes"],
     ["grid-power-electronics", "gallium-nitride", "consumes"],
     ["grid-power-electronics", "silicon-carbide", "consumes"],
@@ -137,6 +143,9 @@ async function main() {
     { from: "coastal-refining", to: "nordic-semiconductors", share: 0.21, material: "gallium-6n", kind: "flow", risk: "medium" },
     { from: "pacific-gan-works", to: "port-of-singapore", share: 0.9, material: "gallium-nitride", kind: "route", risk: "low" },
     { from: "port-of-singapore", to: "malacca-corridor", share: 0.85, material: "gallium-nitride", kind: "route", corridor: "Malacca Corridor", risk: "medium" },
+    { from: "malacca-corridor", to: "chennai-port", share: 0.3, material: "gallium-nitride", kind: "route", corridor: "Bay of Bengal", risk: "low" },
+    { from: "chennai-port", to: "bengaluru-rf-plant", share: 0.3, material: "gallium-nitride", kind: "flow", corridor: "NH48 road corridor", risk: "low" },
+    { from: "bengaluru-rf-plant", to: "india-aesa-radar", share: 0.3, material: "gallium-nitride", kind: "flow", risk: "medium" },
     { from: "malacca-corridor", to: "suez-canal", share: 0.7, material: "gallium-nitride", kind: "route", corridor: "Indian Ocean - Red Sea", risk: "medium" },
     { from: "suez-canal", to: "port-of-rotterdam", share: 0.7, material: "gallium-nitride", kind: "route", corridor: "Mediterranean - North Sea", risk: "low" },
     { from: "port-of-rotterdam", to: "nordic-semiconductors", share: 0.4, material: "gallium-nitride", kind: "flow", risk: "low" },
@@ -162,7 +171,7 @@ async function main() {
           { order: 1, stage: "PROCESSING", entityId: E("coastal-refining") },
           { order: 2, stage: "MANUFACTURING", entityId: E("pacific-gan-works") },
           { order: 3, stage: "LOGISTICS", entityId: E("malacca-corridor") },
-          { order: 4, stage: "END USE", entityId: E("aegis-radar-programme") },
+          { order: 4, stage: "END USE", entityId: E("india-aesa-radar") },
         ],
       },
     },
@@ -190,6 +199,7 @@ async function main() {
     { name: "Grid inverter modernisation", programme: "Grid Power Electronics", sector: "Energy", exposure: "medium", entities: ["grid-power-electronics"] },
     { name: "Offshore wind HVDC converters", programme: "Grid Power Electronics", sector: "Energy", exposure: "low", entities: ["grid-power-electronics", "sic-wafer-fab"] },
     { name: "Fleet battery storage pilot", programme: "Energy Storage", sector: "Energy", exposure: "medium", entities: ["battery-cell-plant"] },
+    { name: "AESA radar fleet upgrade", programme: "Indian AESA Radar Programme", sector: "Defence electronics", exposure: "high", entities: ["india-aesa-radar", "bengaluru-rf-plant", "chennai-port"] },
     { name: "Secure comms RF modules", programme: "Secure Communications", sector: "Defence electronics", exposure: "high", entities: ["pacific-gan-works", "nordic-semiconductors"] },
   ];
   for (const p of projectsData) {
@@ -328,22 +338,22 @@ async function main() {
   });
 
   // ---------- Journey (chain simulation on the real map) ----------
-  const J = (order: number, stage: string, title: string, description: string, mode: string, durationDays: number, from: string | null, to: string | null, waypoints: [number, number][] | null) =>
-    ({ materialSlug: "gallium-nitride", order, stage, title, description, mode, durationDays, fromEntityId: from ? E(from) : null, toEntityId: to ? E(to) : null, waypoints: waypoints ? JSON.stringify(waypoints) : null });
+  const J = (order: number, stage: string, title: string, description: string, mode: string, durationDays: number, costUsd: number, cargo: string, carrier: string, from: string | null, to: string | null, waypoints: [number, number][] | null) =>
+    ({ materialSlug: "gallium-nitride", order, stage, title, description, mode, durationDays, costUsd, cargo, carrier, fromEntityId: from ? E(from) : null, toEntityId: to ? E(to) : null, waypoints: waypoints ? JSON.stringify(waypoints) : null });
+  // Costs are per shipment lot (one 100-wafer lot of GaN and the inputs behind it), illustrative.
   await prisma.journeyStep.createMany({
     data: [
-      J(0, "MINING", "Bauxite mined at Weipa", "Gallium is never mined on its own. It rides along in bauxite at roughly 50 parts per million, so the GaN story starts at an aluminium ore mine on the Gulf of Carpentaria.", "site", 0, "bauxite-feedstock", null, null),
-      J(1, "LOGISTICS", "Bulk carrier to East Asia", "Bauxite ships north through the Torres Strait, past the Philippines and up to a coastal refinery. About 18 days at sea.", "sea", 18, "bauxite-feedstock", "coastal-refining", [[-10.6, 142.3], [-5.5, 133.0], [0.5, 128.5], [6.0, 126.5], [14.0, 123.0], [20.5, 121.0], [26.0, 122.5]]),
-      J(2, "REFINING", "Gallium extracted and refined to 6N", "During alumina refining (the Bayer process) gallium concentrates in the liquor. It is recovered electrolytically, then refined to 99.9999% purity. This is where supply concentrates: two processors carry 68% of the modeled flow.", "site", 30, "coastal-refining", null, null),
-      J(3, "LOGISTICS", "Air freight to Singapore", "High-purity gallium is light and valuable, so it flies. One day door to door.", "air", 1, "coastal-refining", "pacific-gan-works", null),
-      J(4, "MANUFACTURING", "GaN epitaxy and wafer fabrication", "Gallium reacts with ammonia-derived nitrogen in MOCVD reactors to grow gallium nitride layers on substrates. Wafers are patterned, tested and diced. About six weeks.", "site", 45, "pacific-gan-works", null, null),
-      J(5, "LOGISTICS", "Truck to the Port of Singapore", "Finished wafer lots move a few kilometres to the container terminal.", "road", 1, "pacific-gan-works", "port-of-singapore", null),
-      J(6, "LOGISTICS", "Malacca Strait and the Indian Ocean", "The monitored chokepoint. Containers head north-west through the Strait of Malacca, round Sri Lanka and cross to the Gulf of Aden and the Red Sea.", "sea", 16, "port-of-singapore", "suez-canal", [[2.5, 101.5], [5.8, 97.4], [6.0, 80.0], [11.5, 56.0], [12.5, 48.0], [12.6, 43.4], [16.5, 41.0], [21.5, 38.2], [27.6, 34.2], [29.9, 32.6]]),
-      J(7, "LOGISTICS", "Suez to Rotterdam", "Through the canal, across the Mediterranean, out past Gibraltar and up the Atlantic coast to the largest port in Europe.", "sea", 12, "suez-canal", "port-of-rotterdam", [[31.3, 32.3], [34.8, 25.0], [36.4, 15.0], [37.6, 10.5], [37.0, 2.0], [36.0, -5.6], [37.0, -9.6], [43.8, -9.6], [48.6, -5.6], [50.1, -1.0], [51.0, 1.6], [51.95, 3.5]]),
-      J(8, "LOGISTICS", "Short-sea leg to Oslo", "Wafers transship at Rotterdam and continue by feeder vessel across the North Sea and up the Oslofjord.", "sea", 3, "port-of-rotterdam", "nordic-semiconductors", [[52.5, 3.8], [55.5, 6.5], [57.6, 8.4], [59.0, 10.6]]),
-      J(9, "ASSEMBLY", "RF front-end modules assembled", "GaN dies are packaged into transmit/receive modules, then burned in and RF-tested. Three weeks.", "site", 20, "nordic-semiconductors", null, null),
-      J(10, "LOGISTICS", "Air freight to the United Kingdom", "Tested modules fly to the integration site.", "air", 1, "nordic-semiconductors", "aegis-radar-programme", null),
-      J(11, "END_USE", "Integrated into the radar array", "Thousands of GaN modules make up an active electronically scanned array. From ore to antenna: roughly 150 days and five countries.", "site", 0, "aegis-radar-programme", null, null),
+      J(0, "MINING", "Bauxite mined at Weipa", "Gallium is never mined on its own. It rides along in bauxite at roughly 50 parts per million, so the GaN story starts at an aluminium ore mine on the Gulf of Carpentaria.", "site", 2, 1800, "Bauxite ore, ~60 t share of a bulk cargo", "Open-pit mine, haul trucks to the wharf", "bauxite-feedstock", null, null),
+      J(1, "LOGISTICS", "Bulk carrier to East Asia", "Bauxite ships north through the Torres Strait, past the Philippines and up to a coastal refinery. About 18 days at sea.", "sea", 18, 2400, "Bauxite ore in bulk", "Capesize bulk carrier", "bauxite-feedstock", "coastal-refining", [[-10.6, 142.3], [-5.5, 133.0], [0.5, 128.5], [6.0, 126.5], [14.0, 123.0], [20.5, 121.0], [26.0, 122.5]]),
+      J(2, "REFINING", "Gallium extracted and refined to 6N", "During alumina refining (the Bayer process) gallium concentrates in the liquor. It is recovered electrolytically, then refined to 99.9999% purity. This is where supply concentrates: two processors carry 68% of the modeled flow.", "site", 30, 32500, "~50 kg of 6N gallium", "Bayer-liquor recovery line, zone refining", "coastal-refining", null, null),
+      J(3, "LOGISTICS", "Air freight to Singapore", "High-purity gallium is light and valuable, so it flies. One day door to door.", "air", 1, 1200, "50 kg 6N gallium, sealed ingots", "Air cargo (belly freight)", "coastal-refining", "pacific-gan-works", null),
+      J(4, "MANUFACTURING", "GaN epitaxy and wafer fabrication", "Gallium reacts with ammonia-derived nitrogen in MOCVD reactors to grow gallium nitride layers on substrates. Wafers are patterned, tested and diced. About six weeks.", "site", 45, 100000, "One 100-wafer lot of GaN epitaxial wafers", "MOCVD epitaxy line, 150 mm fab", "pacific-gan-works", null, null),
+      J(5, "LOGISTICS", "Truck to the Port of Singapore", "Finished wafer lots move a few kilometres to the container terminal.", "road", 1, 350, "100-wafer lot, nitrogen-purged shipping cassettes", "Bonded truck", "pacific-gan-works", "port-of-singapore", null),
+      J(6, "LOGISTICS", "Malacca Strait to the Bay of Bengal", "The monitored chokepoint. Containers head north-west through the Strait of Malacca, round the tip of Sumatra and cross the Bay of Bengal to Chennai. About seven days.", "sea", 7, 6500, "Reefer-monitored container, 100-wafer lot", "Container feeder vessel", "port-of-singapore", "chennai-port", [[2.5, 101.5], [5.8, 97.4], [7.5, 90.0], [10.0, 84.5], [12.2, 81.5]]),
+      J(7, "LOGISTICS", "Customs clearance and road to Bengaluru", "Wafers clear customs at Chennai (indicative basic customs duty 7.5% on HS 3818.00) and travel 350 km up the NH48 corridor to Bengaluru.", "road", 2, 9300, "100-wafer lot, customs-cleared", "Bonded truck, NH48", "chennai-port", "bengaluru-rf-plant", [[12.9, 79.1], [13.0, 78.2]]),
+      J(8, "ASSEMBLY", "RF front-end modules assembled in Bengaluru", "GaN dies are packaged into transmit/receive modules, then burned in and RF-tested in the Bengaluru defence-electronics cluster. Three weeks.", "site", 20, 48000, "~1,200 T/R modules from one wafer lot", "Module packaging and RF test line", "bengaluru-rf-plant", null, null),
+      J(9, "LOGISTICS", "Road to Hyderabad", "Tested modules travel 570 km north to the radar integration site.", "road", 2, 900, "Packaged T/R modules, ESD-safe crates", "Secure truck, NH44", "bengaluru-rf-plant", "india-aesa-radar", [[14.2, 77.7], [15.8, 78.0]]),
+      J(10, "END_USE", "Integrated into the AESA radar array", "Thousands of GaN modules make up an active electronically scanned array. From Australian ore to an Indian antenna: roughly 128 days, six countries, and most of the cost added in the last two stops.", "site", 0, 0, "Radar array, ~1,200 modules per face", "Integration and test hall", "india-aesa-radar", null, null),
     ],
   });
 
